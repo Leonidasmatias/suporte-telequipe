@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import StatCard from "@/components/StatCard";
@@ -8,50 +8,44 @@ import { ETAPAS, NOME_ETAPA, buildColaboradorInsights, type EtapaCodigo } from "
 
 export const dynamic = "force-dynamic";
 
-type Avaliacao = {
-  id: number;
-  colaborador_nome: string;
-  etapa: EtapaCodigo;
-  nivel: string;
-  imt_score: number;
-  data_avaliacao: string | null;
-};
-
-type Colaborador = { id: number; nome: string };
-type AvgRow = { a: number | null };
-
 const niveis = ["Não certificado", "Básico", "Intermediário", "Avançado"];
 
 function nivelBadgeClass(nivel: string) {
   switch (nivel) {
     case "Avançado":
-      return "bg-emerald-50 text-emerald-700";
+      return "chip-success";
     case "Intermediário":
-      return "bg-brand-50 text-brand-700";
+      return "chip-info";
     case "Básico":
-      return "bg-amber-50 text-amber-700";
+      return "chip-warning";
     default:
-      return "bg-slate-100 text-slate-500";
+      return "chip-neutral";
   }
 }
 
-export default function MatrizNokiaPage() {
-  const avaliacoes = db
-    .prepare(
-      `SELECT m.id, c.nome as colaborador_nome, m.etapa, m.nivel, m.imt_score, m.data_avaliacao
-       FROM matriz_nokia m
-       JOIN colaboradores c ON c.id = m.colaborador_id
-       ORDER BY m.created_at DESC`
-    )
-    .all() as Avaliacao[];
+export default async function MatrizNokiaPage() {
+  const avaliacoesRaw = await prisma.avaliacaoCompetencia.findMany({
+    include: { colaborador: true, competencia: true },
+    orderBy: { createdAt: "desc" },
+  });
 
-  const colaboradores = db
-    .prepare("SELECT id, nome FROM colaboradores ORDER BY nome ASC")
-    .all() as Colaborador[];
+  const avaliacoes = avaliacoesRaw.map((a) => ({
+    id: a.id,
+    colaboradorNome: a.colaborador.nome,
+    etapa: a.competencia.nome as EtapaCodigo,
+    nivel: a.nivel,
+    imtScore: a.nota,
+  }));
 
-  const imtMedio = (db.prepare("SELECT AVG(imt_score) as a FROM matriz_nokia").get() as AvgRow).a;
+  const colaboradores = await prisma.colaborador.findMany({
+    orderBy: { nome: "asc" },
+    select: { id: true, nome: true },
+  });
 
-  const insights = buildColaboradorInsights();
+  const imtAgg = await prisma.avaliacaoCompetencia.aggregate({ _avg: { nota: true } });
+  const imtMedio = imtAgg._avg.nota;
+
+  const insights = await buildColaboradorInsights();
 
   return (
     <div>
@@ -72,7 +66,7 @@ export default function MatrizNokiaPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="card lg:col-span-1">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">Nova avaliação</h2>
+          <h2 className="mb-4 text-base font-semibold text-white">Nova avaliação</h2>
           <form action={createAvaliacao} className="space-y-4">
             <div>
               <label className="label-field">Colaborador</label>
@@ -113,7 +107,7 @@ export default function MatrizNokiaPage() {
         </div>
 
         <div className="card lg:col-span-2">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">Avaliações registradas</h2>
+          <h2 className="mb-4 text-base font-semibold text-white">Avaliações registradas</h2>
           {avaliacoes.length === 0 ? (
             <EmptyState message="Nenhuma avaliação registrada ainda." />
           ) : (
@@ -131,12 +125,12 @@ export default function MatrizNokiaPage() {
                 <tbody>
                   {avaliacoes.map((a) => (
                     <tr key={a.id}>
-                      <td className="font-medium text-slate-900">{a.colaborador_nome}</td>
+                      <td className="font-medium text-white">{a.colaboradorNome}</td>
                       <td>{NOME_ETAPA[a.etapa]}</td>
                       <td>
                         <span className={`badge ${nivelBadgeClass(a.nivel)}`}>{a.nivel}</span>
                       </td>
-                      <td>{a.imt_score}%</td>
+                      <td className="tabular-nums">{a.imtScore}%</td>
                       <td>
                         <form action={deleteAvaliacao}>
                           <input type="hidden" name="id" value={a.id} />
@@ -153,8 +147,8 @@ export default function MatrizNokiaPage() {
       </div>
 
       <div className="card mt-6">
-        <h2 className="mb-1 text-base font-semibold text-slate-900">Gargalo por colaborador</h2>
-        <p className="mb-4 text-xs text-slate-500">
+        <h2 className="mb-1 text-base font-semibold text-white">Gargalo por colaborador</h2>
+        <p className="mb-4 text-xs text-graphite-500">
           Etapa com a menor média de IMT entre MOS, XML, TX, SWAP, FAM e REVERSA para cada colaborador avaliado.
         </p>
         {insights.length === 0 ? (
@@ -165,7 +159,6 @@ export default function MatrizNokiaPage() {
               <thead>
                 <tr>
                   <th>Colaborador</th>
-                  <th>Equipe</th>
                   <th>IMT médio</th>
                   <th>Etapa crítica (gargalo)</th>
                 </tr>
@@ -173,16 +166,15 @@ export default function MatrizNokiaPage() {
               <tbody>
                 {insights.map((c) => (
                   <tr key={c.id}>
-                    <td className="font-medium text-slate-900">{c.nome}</td>
-                    <td>{c.equipe_nome ?? "—"}</td>
+                    <td className="font-medium text-white">{c.nome}</td>
                     <td><ScoreBar value={c.mediaGeral} /></td>
                     <td>
                       {c.gargalo ? (
-                        <span className="badge bg-red-50 text-red-600">
+                        <span className="badge chip-danger">
                           {NOME_ETAPA[c.gargalo.etapa]} · {Math.round(c.gargalo.media)}%
                         </span>
                       ) : (
-                        <span className="text-xs text-slate-400">—</span>
+                        <span className="text-xs text-graphite-600">—</span>
                       )}
                     </td>
                   </tr>

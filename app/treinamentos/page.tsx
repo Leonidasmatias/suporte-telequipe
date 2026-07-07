@@ -1,29 +1,24 @@
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { createTreinamento, deleteTreinamento } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type Treinamento = {
-  id: number;
-  nome: string;
-  categoria: string | null;
-  carga_horaria: number | null;
-  data_realizacao: string | null;
-  instrutor: string | null;
-  participantes: number;
-};
+export default async function TreinamentosPage() {
+  const treinamentosRaw = await prisma.treinamento.findMany({
+    include: { colaboradores: true },
+    orderBy: { createdAt: "desc" },
+  });
 
-export default function TreinamentosPage() {
-  const treinamentos = db
-    .prepare(
-      `SELECT t.id, t.nome, t.categoria, t.carga_horaria, t.data_realizacao, t.instrutor,
-              (SELECT COUNT(*) FROM treinamento_colaboradores tc WHERE tc.treinamento_id = t.id) as participantes
-       FROM treinamentos t
-       ORDER BY t.data_realizacao DESC`
-    )
-    .all() as Treinamento[];
+  const treinamentos = treinamentosRaw.map((t) => ({
+    id: t.id,
+    nome: t.titulo,
+    categoria: t.categoria,
+    cargaHoraria: t.cargaHoraria,
+    data: t.data ? t.data.toISOString().slice(0, 10) : null,
+    participantes: t.colaboradores.length,
+  }));
 
   return (
     <div>
@@ -31,7 +26,7 @@ export default function TreinamentosPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="card lg:col-span-1">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">Novo treinamento</h2>
+          <h2 className="mb-4 text-base font-semibold text-white">Novo treinamento</h2>
           <form action={createTreinamento} className="space-y-4">
             <div>
               <label className="label-field">Nome</label>
@@ -58,7 +53,7 @@ export default function TreinamentosPage() {
         </div>
 
         <div className="card lg:col-span-2">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">
+          <h2 className="mb-4 text-base font-semibold text-white">
             Treinamentos cadastrados ({treinamentos.length})
           </h2>
           {treinamentos.length === 0 ? (
@@ -79,12 +74,12 @@ export default function TreinamentosPage() {
                 <tbody>
                   {treinamentos.map((t) => (
                     <tr key={t.id}>
-                      <td className="font-medium text-slate-900">{t.nome}</td>
+                      <td className="font-medium text-white">{t.nome}</td>
                       <td>{t.categoria || "—"}</td>
-                      <td>{t.carga_horaria ? `${t.carga_horaria}h` : "—"}</td>
-                      <td>{t.data_realizacao || "—"}</td>
+                      <td>{t.cargaHoraria ? `${t.cargaHoraria}h` : "—"}</td>
+                      <td>{t.data || "—"}</td>
                       <td>
-                        <span className="badge bg-brand-50 text-brand-700">{t.participantes}</span>
+                        <span className="badge chip-success">{t.participantes}</span>
                       </td>
                       <td>
                         <form action={deleteTreinamento}>

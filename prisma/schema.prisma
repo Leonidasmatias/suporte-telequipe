@@ -1,0 +1,188 @@
+// SUPORTE TELEQUIPE — schema Prisma (PostgreSQL)
+//
+// Modelagem alinhada à especificação da V3 (Leader, Equipe, Colaborador,
+// CompetenciaNokia, AvaliacaoCompetencia, Treinamento). O modelo
+// TreinamentoColaborador foi mantido como tabela de junção (não estava na
+// lista literal do briefing) porque a regra de negócio existente depende
+// dele: a página /treinamentos exibe "participantes" por treinamento e
+// /insights-operacionais cria treinamentos já vinculados a um colaborador.
+//
+// IDs: mantidos como Int autoincrement (em vez de String/cuid) para preservar
+// 100% da lógica de Server Actions existente, que já trabalha com
+// Number(formData.get("id")) em toda a aplicação.
+//
+// V4: adicionou a CENTRAL DE SUPORTE TÉCNICO (model SupportTicket).
+//
+// V5: adicionou Equipe.codigo (código sequencial TQ-000X).
+//
+// V6 — REESTRUTURAÇÃO CORPORATIVA: os models Leader e Equipe foram removidos
+// por completo. O sistema passa a ter uma única entidade central de pessoas:
+// Colaborador (Cadastro Mestre), alimentada por sincronização em massa
+// (Smart Sync) a partir de um único arquivo Excel oficial. Não há mais
+// distinção entre líder/instalador nem agrupamento por equipe. Como CPF/RG
+// deixam de ser usados, a deduplicação passa a usar `cadastro` (matrícula,
+// chave natural estável) como chave primária de identificação, com fallback
+// por nome + empresa + telefone quando `cadastro` não está disponível.
+//
+// SupportTicket passa a pertencer a um único colaborador (colaboradorId).
+// Os campos liderNomeHistorico/equipeNomeHistorico preservam, como texto
+// solto (sem FK), o nome do líder/equipe que constavam nos atendimentos
+// registrados antes desta reestruturação — decisão explícita do usuário foi
+// começar o Cadastro Mestre do zero (sem migrar líderes/equipes antigos para
+// Colaborador), então esses atendimentos legados não podem apontar para um
+// colaboradorId válido, mas o texto fica preservado para consulta histórica.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Colaborador {
+  id     Int    @id @default(autoincrement())
+  nome   String
+
+  // "CLT", "PJ" ou outro classificador de vínculo — livre, vindo do Excel.
+  tipoPessoa String?
+  regional   String?
+
+  // Matrícula / código de cadastro — chave natural estável, usada como
+  // identificador primário de deduplicação no Smart Sync (não usamos CPF).
+  // Nullable+unique: permite múltiplos registros sem cadastro (ex: incluídos
+  // manualmente antes de terem matrícula formal) sem violar a constraint.
+  cadastro String? @unique
+
+  empresaNome String?
+  cargo       String?
+  telefone    String?
+
+  // "ativo" | "inativo". Smart Sync marca como "inativo" (nunca exclui)
+  // qualquer colaborador que não apareça mais no Excel importado.
+  status String @default("ativo")
+
+  // Quando este colaborador foi visto pela última vez em uma importação, e
+  // quando seus dados foram alterados pela última vez (import ou edição manual).
+  dataImportacao    DateTime?
+  ultimaAtualizacao DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  avaliacoes     AvaliacaoCompetencia[]
+  treinamentos   TreinamentoColaborador[]
+  supportTickets SupportTicket[]
+
+  @@map("colaboradores")
+}
+
+model CompetenciaNokia {
+  id        Int      @id @default(autoincrement())
+  // Código fixo da etapa Nokia: MOS, XML, TX, SWAP, FAM ou REVERSA.
+  nome      String   @unique
+  createdAt DateTime @default(now())
+
+  avaliacoes AvaliacaoCompetencia[]
+
+  @@map("competencias_nokia")
+}
+
+model AvaliacaoCompetencia {
+  id            Int       @id @default(autoincrement())
+  colaboradorId Int
+  competenciaId Int
+  // Nota de 0 a 100 — equivalente ao "imt_score" da V2.
+  nota          Int
+  nivel         String    @default("Não certificado")
+  avaliadoEm    DateTime?
+  createdAt     DateTime  @default(now())
+
+  colaborador Colaborador      @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+  competencia CompetenciaNokia @relation(fields: [competenciaId], references: [id], onDelete: Cascade)
+
+  @@index([colaboradorId, competenciaId])
+  @@map("avaliacoes_competencia")
+}
+
+model Treinamento {
+  id           Int       @id @default(autoincrement())
+  titulo       String
+  descricao    String?
+  categoria    String?
+  cargaHoraria Int?
+  data         DateTime?
+  instrutor    String?
+  createdAt    DateTime  @default(now())
+
+  colaboradores TreinamentoColaborador[]
+
+  @@map("treinamentos")
+}
+
+model TreinamentoColaborador {
+  id            Int    @id @default(autoincrement())
+  treinamentoId Int
+  colaboradorId Int
+  status        String @default("pendente")
+
+  treinamento Treinamento @relation(fields: [treinamentoId], references: [id], onDelete: Cascade)
+  colaborador Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+
+  @@map("treinamento_colaboradores")
+}
+
+// ============================================================
+// CENTRAL DE SUPORTE TÉCNICO
+// ============================================================
+// Banco de conhecimento operacional: registra todo atendimento técnico
+// prestado a colaboradores de campo (telefone, WhatsApp, remoto,
+// presencial...). Alimenta KPIs, indicadores automáticos e, futuramente, a
+// camada de IA operacional. V6: cada atendimento pertence a um único
+// colaborador (não existe mais atendimento por equipe/líder).
+model SupportTicket {
+  id     Int @id @default(autoincrement())
+  // Numeração sequencial amigável para exibição ("Atendimento #numero"),
+  // independente do id interno.
+  numero Int @unique @default(autoincrement())
+
+  dataAtendimento DateTime
+  horaInicio      String
+  horaFim         String?
+  // Calculado automaticamente a partir de horaInicio/horaFim, em minutos.
+  tempoAtendimento Int?
+
+  colaboradorId Int?
+
+  // Snapshot em texto (sem FK) do líder/equipe que constavam em atendimentos
+  // registrados antes da reestruturação V6 — ver comentário no topo do
+  // arquivo. Somente leitura/histórico; novos atendimentos não preenchem
+  // estes campos.
+  liderNomeHistorico  String?
+  equipeNomeHistorico String?
+
+  projeto String?
+  cliente String?
+
+  tipoAtendimento String
+  categoria       String
+
+  descricaoProblema  String
+  solucaoAplicada    String?
+  resultado          String
+  status             String  @default("Aberto")
+  observacoes        String?
+  tecnicoResponsavel String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  colaborador Colaborador? @relation(fields: [colaboradorId], references: [id], onDelete: SetNull)
+
+  @@index([colaboradorId])
+  @@index([status])
+  @@index([categoria])
+  @@map("support_tickets")
+}

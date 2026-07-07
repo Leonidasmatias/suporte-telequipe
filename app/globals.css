@@ -2,53 +2,147 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  LEONIDAS TECH — OPERATOR COMMAND CENTER
+  Camada visual do SUPORTE TELEQUIPE. Nenhuma regra de negócio vive aqui —
+  isto é puramente a casca visual sobre a mesma estrutura de páginas e
+  Server Actions já existentes. Classes utilitárias (.card, .btn-primary,
+  .input-field, .table-base, .badge, .chip-*) são a base do design system:
+  redefini-las aqui já repinta o sistema inteiro sem tocar página por página.
+*/
+
 html,
 body {
   height: 100%;
 }
 
 body {
-  @apply bg-slate-50 text-slate-900;
+  @apply bg-graphite-950 text-graphite-100 antialiased;
+  background-image:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(23, 200, 119, 0.07), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 0%, rgba(59, 130, 246, 0.05), transparent 55%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background-color: rgba(23, 200, 119, 0.28);
+  color: #ffffff;
+}
+
+/* Scrollbar discreta, alinhada à paleta grafite */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3436 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #2a3436;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Estado de foco por teclado — sempre visível, nunca removido */
+:focus-visible {
+  outline: 2px solid theme("colors.neon.500");
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 @layer components {
+  /* ---------- Superfícies ---------- */
   .card {
-    @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm;
+    @apply relative rounded-xl border border-graphite-700 bg-graphite-800/70 p-5 shadow-panel;
   }
 
+  .panel-header {
+    @apply mb-4 flex items-center justify-between gap-3;
+  }
+
+  /* ---------- Botões ---------- */
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700 disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-neon-500 px-4 py-2 text-sm font-semibold text-graphite-950 shadow-[0_1px_0_0_rgba(255,255,255,0.15)_inset] transition-all duration-150 ease-out;
+  }
+  .btn-primary:hover {
+    @apply bg-neon-400;
+    box-shadow: 0 0 0 1px rgba(23, 200, 119, 0.4), 0 0 18px -2px rgba(23, 200, 119, 0.55);
+  }
+  .btn-primary:active {
+    @apply bg-neon-600;
+  }
+  .btn-primary:disabled {
+    @apply cursor-not-allowed bg-graphite-600 text-graphite-400 shadow-none;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-graphite-600 bg-graphite-700/50 px-4 py-2 text-sm font-medium text-graphite-100 transition-all duration-150 ease-out;
+  }
+  .btn-secondary:hover {
+    @apply border-graphite-500 bg-graphite-600/70 text-white;
+  }
+  .btn-secondary:disabled {
+    @apply cursor-not-allowed border-graphite-700 bg-transparent text-graphite-500;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-400 transition-all duration-150 ease-out;
+  }
+  .btn-danger:hover {
+    @apply border-red-500/40 bg-red-500/20 text-red-300;
   }
 
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-graphite-300 transition-colors duration-150 hover:bg-graphite-700/60 hover:text-white;
+  }
+
+  /* ---------- Formulários ---------- */
   .input-field {
-    @apply w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+    @apply w-full rounded-lg border border-graphite-600 bg-graphite-900/80 px-3 py-2 text-sm text-graphite-50 placeholder:text-graphite-500 transition-colors duration-150 focus:border-neon-500 focus:outline-none focus:ring-1 focus:ring-neon-500/40;
   }
 
   .label-field {
-    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500;
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-graphite-400;
   }
 
+  /* ---------- Tabelas ---------- */
   .table-base {
-    @apply w-full text-left text-sm;
+    @apply w-full border-separate border-spacing-0 text-left text-sm;
   }
-
   .table-base th {
-    @apply border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500;
+    @apply sticky top-0 border-b border-graphite-700 bg-graphite-800/95 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-graphite-400;
   }
-
   .table-base td {
-    @apply border-b border-slate-100 px-4 py-3 text-slate-700;
+    @apply border-b border-graphite-800 px-4 py-3 text-graphite-200;
+  }
+  .table-base tbody tr {
+    transition: background-color 150ms ease-out;
+  }
+  .table-base tbody tr:hover {
+    background-color: rgba(23, 200, 119, 0.04);
   }
 
+  /* ---------- Badges / Chips ---------- */
   .badge {
-    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+    @apply inline-flex items-center gap-1 rounded-full border border-transparent px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .chip-success {
+    @apply bg-neon-500/10 text-neon-400 border-neon-500/20;
+  }
+  .chip-warning {
+    @apply bg-amber-500/10 text-amber-400 border-amber-500/20;
+  }
+  .chip-danger {
+    @apply bg-red-500/10 text-red-400 border-red-500/20;
+  }
+  .chip-info {
+    @apply bg-info-500/10 text-info-400 border-info-500/20;
+  }
+  .chip-neutral {
+    @apply bg-graphite-700/60 text-graphite-300 border-graphite-600;
   }
 }

@@ -1,6 +1,6 @@
 "use server";
 
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { ETAPAS, TREINAMENTO_SUGERIDO, type EtapaCodigo } from "@/lib/imt";
 
@@ -17,19 +17,23 @@ export async function criarTreinamentoSugerido(formData: FormData) {
 
   if (!colaboradorId || !CODIGOS_VALIDOS.has(etapa)) return;
 
-  const nome = TREINAMENTO_SUGERIDO[etapa as EtapaCodigo];
+  const titulo = TREINAMENTO_SUGERIDO[etapa as EtapaCodigo];
 
-  const resultado = db
-    .prepare(
-      `INSERT INTO treinamentos (nome, categoria, carga_horaria, instrutor)
-       VALUES (?, 'Sugestão Automática (IMT)', 8, NULL)`
-    )
-    .run(nome);
+  const treinamento = await prisma.treinamento.create({
+    data: {
+      titulo,
+      categoria: "Sugestão Automática (IMT)",
+      cargaHoraria: 8,
+    },
+  });
 
-  db.prepare(
-    `INSERT INTO treinamento_colaboradores (treinamento_id, colaborador_id, status)
-     VALUES (?, ?, 'pendente')`
-  ).run(resultado.lastInsertRowid, colaboradorId);
+  await prisma.treinamentoColaborador.create({
+    data: {
+      treinamentoId: treinamento.id,
+      colaboradorId,
+      status: "pendente",
+    },
+  });
 
   revalidatePath("/treinamentos");
   revalidatePath("/home");

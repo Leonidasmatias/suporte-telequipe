@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
@@ -7,8 +7,6 @@ import TrendBadge from "@/components/TrendBadge";
 import ScoreBar from "@/components/ScoreBar";
 import {
   buildColaboradorInsights,
-  buildEquipeInsights,
-  buildLiderInsights,
   buildAlertas,
   calcularTendenciaGeral,
   NOME_ETAPA,
@@ -16,46 +14,61 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type CountRow = { c: number };
-type AvgRow = { a: number | null };
+export default async function HomePage() {
+  const [
+    totalColaboradores,
+    totalAtivos,
+    totalCLT,
+    totalPJ,
+    totalTreinamentos,
+    imtAgg,
+    ultimaImportacaoAgg,
+    ultimaAtualizacaoAgg,
+  ] = await Promise.all([
+    prisma.colaborador.count(),
+    prisma.colaborador.count({ where: { status: "ativo" } }),
+    prisma.colaborador.count({ where: { tipoPessoa: "CLT" } }),
+    prisma.colaborador.count({ where: { tipoPessoa: "PJ" } }),
+    prisma.treinamento.count(),
+    prisma.avaliacaoCompetencia.aggregate({ _avg: { nota: true } }),
+    prisma.colaborador.aggregate({ _max: { dataImportacao: true } }),
+    prisma.colaborador.aggregate({ _max: { ultimaAtualizacao: true } }),
+  ]);
+  const totalInativos = totalColaboradores - totalAtivos;
+  const imtMedio = imtAgg._avg.nota;
 
-export default function HomePage() {
-  const totalLideres = (db.prepare("SELECT COUNT(*) as c FROM lideres").get() as CountRow).c;
-  const totalEquipes = (db.prepare("SELECT COUNT(*) as c FROM equipes").get() as CountRow).c;
-  const totalColaboradores = (
-    db.prepare("SELECT COUNT(*) as c FROM colaboradores WHERE status = 'ativo'").get() as CountRow
-  ).c;
-  const totalTreinamentos = (db.prepare("SELECT COUNT(*) as c FROM treinamentos").get() as CountRow).c;
-  const imtMedio = (db.prepare("SELECT AVG(imt_score) as a FROM matriz_nokia").get() as AvgRow).a;
-
-  const tendenciaGeral = calcularTendenciaGeral();
-  const colaboradorInsights = buildColaboradorInsights();
-  const equipeInsights = buildEquipeInsights();
-  const liderInsights = buildLiderInsights();
+  const tendenciaGeral = await calcularTendenciaGeral();
+  const colaboradorInsights = await buildColaboradorInsights();
   const alertas = buildAlertas(colaboradorInsights);
 
-  const equipesResumo = db
-    .prepare(
-      `SELECT e.id, e.nome, e.regional, l.nome as lider_nome,
-              (SELECT COUNT(*) FROM colaboradores c WHERE c.equipe_id = e.id AND c.status = 'ativo') as membros
-       FROM equipes e
-       LEFT JOIN lideres l ON l.id = e.lider_id
-       ORDER BY e.created_at DESC
-       LIMIT 5`
-    )
-    .all() as { id: number; nome: string; regional: string | null; lider_nome: string | null; membros: number }[];
+  const colaboradoresRecentesRaw = await prisma.colaborador.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+  const colaboradoresRecentes = colaboradoresRecentesRaw.map((c) => ({
+    id: c.id,
+    nome: c.nome,
+    cargo: c.cargo,
+    regional: c.regional,
+    status: c.status,
+  }));
 
-  const treinamentosRecentes = db
-    .prepare(
-      `SELECT id, nome, categoria, data_realizacao FROM treinamentos ORDER BY created_at DESC LIMIT 5`
-    )
-    .all() as { id: number; nome: string; categoria: string | null; data_realizacao: string | null }[];
+  const treinamentosRecentesRaw = await prisma.treinamento.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  });
+  const treinamentosRecentes = treinamentosRecentesRaw.map((t) => ({
+    id: t.id,
+    nome: t.titulo,
+    categoria: t.categoria,
+    data: t.data ? t.data.toISOString().slice(0, 10) : null,
+  }));
 
   return (
     <div>
       <PageHeader
-        title="Dashboard"
-        description="Visão geral da operação de campo — SUPORTE TELEQUIPE"
+        title="Centro de Operações"
+        description="Visão geral em tempo real da operação de campo — SUPORTE TELEQUIPE"
         action={
           <Link href="/insights-operacionais" className="btn-secondary">
             Ver Insights Operacionais
@@ -63,30 +76,60 @@ export default function HomePage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <StatCard label="Líderes" value={totalLideres} accent="brand" />
-        <StatCard label="Equipes" value={totalEquipes} accent="slate" />
-        <StatCard label="Colaboradores ativos" value={totalColaboradores} accent="green" />
-        <StatCard label="Treinamentos" value={totalTreinamentos} accent="amber" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
+        <StatCard label="Colaboradores" value={totalColaboradores} accent="brand" />
+        <StatCard label="Ativos" value={totalAtivos} accent="green" />
+        <StatCard label="Inativos" value={totalInativos} accent="slate" />
+        <StatCard label="CLT" value={totalCLT} accent="brand" />
+        <StatCard label="PJ" value={totalPJ} accent="amber" />
+        <StatCard label="Treinamentos" value={totalTreinamentos} accent="slate" />
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="card">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">IMT médio geral</p>
-          <p className="mt-2 inline-flex rounded-lg bg-brand-50 px-2 py-1 text-3xl font-semibold text-brand-600">
+          <p className="text-xs font-medium uppercase tracking-wide text-graphite-400">IMT médio geral</p>
+          <p className="mt-2 inline-flex rounded-lg bg-neon-500/10 px-2 py-1 text-3xl font-semibold tabular-nums text-neon-400">
             {imtMedio !== null ? `${Math.round(imtMedio)}%` : "—"}
           </p>
           <div className="mt-2">
             <TrendBadge tendencia={tendenciaGeral} />
           </div>
         </div>
+        <div className="card">
+          <p className="text-xs font-medium uppercase tracking-wide text-graphite-400">Cadastro Mestre</p>
+          <p className="mt-2 text-sm text-graphite-300">
+            Última importação:{" "}
+            <span className="font-medium text-graphite-100">
+              {ultimaImportacaoAgg._max.dataImportacao
+                ? ultimaImportacaoAgg._max.dataImportacao.toISOString().slice(0, 16).replace("T", " ")
+                : "—"}
+            </span>
+          </p>
+          <p className="mt-1 text-sm text-graphite-300">
+            Última sincronização:{" "}
+            <span className="font-medium text-graphite-100">
+              {ultimaAtualizacaoAgg._max.ultimaAtualizacao
+                ? ultimaAtualizacaoAgg._max.ultimaAtualizacao.toISOString().slice(0, 16).replace("T", " ")
+                : "—"}
+            </span>
+          </p>
+        </div>
       </div>
 
       {alertas.length > 0 && (
-        <div className="mt-6 card border-amber-200 bg-amber-50/40">
-          <h2 className="mb-3 text-base font-semibold text-slate-900">Alertas automáticos por etapa Nokia</h2>
+        <div className="mt-6 card border-amber-500/20 bg-amber-500/[0.04]">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+            </span>
+            <h2 className="text-base font-semibold text-white">Alertas automáticos por etapa Nokia</h2>
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {alertas.map((alerta) => (
-              <div key={alerta.etapa} className="rounded-lg border border-amber-200 bg-white px-4 py-3">
-                <p className="text-sm font-medium text-slate-800">{alerta.etapaNome}</p>
-                <p className="mt-1 text-xs text-amber-700">
+              <div key={alerta.etapa} className="rounded-lg border border-amber-500/20 bg-graphite-900/60 px-4 py-3">
+                <p className="text-sm font-medium text-graphite-100">{alerta.etapaNome}</p>
+                <p className="mt-1 text-xs text-amber-400">
                   {alerta.quantidade} colaborador(es) abaixo de 70% de IMT
                 </p>
               </div>
@@ -95,116 +138,71 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="card">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">IMT por líder</h2>
-          {liderInsights.length === 0 ? (
-            <EmptyState message="Sem avaliações vinculadas a líderes ainda." />
-          ) : (
-            <div className="space-y-3">
-              {liderInsights.slice(0, 5).map((l) => (
-                <div key={l.id} className="rounded-lg border border-slate-100 px-3 py-2.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-800">{l.nome}</p>
-                    <TrendBadge tendencia={l.tendencia} />
-                  </div>
-                  <div className="mt-2">
-                    <ScoreBar value={l.mediaGeral} />
-                  </div>
+      <div className="mt-8 card">
+        <h2 className="mb-4 text-base font-semibold text-white">IMT por colaborador</h2>
+        {colaboradorInsights.length === 0 ? (
+          <EmptyState message="Cadastre avaliações na Matriz Nokia para começar." />
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {colaboradorInsights.slice(0, 6).map((c) => (
+              <div key={c.id} className="rounded-lg border border-graphite-700 bg-graphite-900/40 px-3 py-2.5 transition-colors duration-150 hover:border-graphite-600">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-graphite-100">{c.nome}</p>
+                  <TrendBadge tendencia={c.tendencia} />
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="card">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">IMT por equipe</h2>
-          {equipeInsights.length === 0 ? (
-            <EmptyState message="Sem avaliações vinculadas a equipes ainda." />
-          ) : (
-            <div className="space-y-3">
-              {equipeInsights.slice(0, 5).map((e) => (
-                <div key={e.id} className="rounded-lg border border-slate-100 px-3 py-2.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-800">{e.nome}</p>
-                    <TrendBadge tendencia={e.tendencia} />
-                  </div>
-                  <div className="mt-2">
-                    <ScoreBar value={e.mediaGeral} />
-                  </div>
-                  {e.gargalo && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      Gargalo: {NOME_ETAPA[e.gargalo.etapa]} ({Math.round(e.gargalo.media)}%)
-                    </p>
-                  )}
+                <div className="mt-2">
+                  <ScoreBar value={c.mediaGeral} />
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="card">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">IMT por colaborador</h2>
-          {colaboradorInsights.length === 0 ? (
-            <EmptyState message="Cadastre avaliações na Matriz Nokia para começar." />
-          ) : (
-            <div className="space-y-3">
-              {colaboradorInsights.slice(0, 5).map((c) => (
-                <div key={c.id} className="rounded-lg border border-slate-100 px-3 py-2.5">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-800">{c.nome}</p>
-                    <TrendBadge tendencia={c.tendencia} />
-                  </div>
-                  <div className="mt-2">
-                    <ScoreBar value={c.mediaGeral} />
-                  </div>
-                  {c.gargalo && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      Gargalo: {NOME_ETAPA[c.gargalo.etapa]} ({Math.round(c.gargalo.media)}%)
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                {c.gargalo && (
+                  <p className="mt-1 text-xs text-graphite-500">
+                    Gargalo: {NOME_ETAPA[c.gargalo.etapa]} ({Math.round(c.gargalo.media)}%)
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">Equipes recentes</h2>
-          {equipesResumo.length === 0 ? (
-            <EmptyState message="Nenhuma equipe cadastrada ainda." />
+          <h2 className="mb-4 text-base font-semibold text-white">Colaboradores recentes</h2>
+          {colaboradoresRecentes.length === 0 ? (
+            <EmptyState message="Nenhum colaborador cadastrado ainda." />
           ) : (
             <div className="space-y-3">
-              {equipesResumo.map((eq) => (
-                <div key={eq.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-3">
+              {colaboradoresRecentes.map((c) => (
+                <Link
+                  key={c.id}
+                  href={`/colaboradores/${c.id}`}
+                  className="flex items-center justify-between rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 transition-colors duration-150 hover:border-neon-500/40 hover:bg-neon-500/[0.03]"
+                >
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{eq.nome}</p>
-                    <p className="text-xs text-slate-500">
-                      {eq.regional ?? "Regional não definida"} · Líder: {eq.lider_nome ?? "não definido"}
+                    <p className="text-sm font-medium text-graphite-100">{c.nome}</p>
+                    <p className="text-xs text-graphite-500">
+                      {c.cargo ?? "Cargo não definido"} · {c.regional ?? "Regional não definida"}
                     </p>
                   </div>
-                  <span className="badge bg-brand-50 text-brand-700">{eq.membros} membros</span>
-                </div>
+                  <span className={`badge ${c.status === "ativo" ? "chip-success" : "chip-neutral"}`}>{c.status}</span>
+                </Link>
               ))}
             </div>
           )}
         </div>
 
         <div className="card">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">Treinamentos recentes</h2>
+          <h2 className="mb-4 text-base font-semibold text-white">Treinamentos recentes</h2>
           {treinamentosRecentes.length === 0 ? (
             <EmptyState message="Nenhum treinamento cadastrado ainda." />
           ) : (
             <div className="space-y-3">
               {treinamentosRecentes.map((t) => (
-                <div key={t.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-4 py-3">
+                <div key={t.id} className="flex items-center justify-between rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 transition-colors duration-150 hover:border-graphite-600">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{t.nome}</p>
-                    <p className="text-xs text-slate-500">{t.categoria ?? "Sem categoria"}</p>
+                    <p className="text-sm font-medium text-graphite-100">{t.nome}</p>
+                    <p className="text-xs text-graphite-500">{t.categoria ?? "Sem categoria"}</p>
                   </div>
-                  <span className="text-xs text-slate-400">{t.data_realizacao ?? "—"}</span>
+                  <span className="text-xs text-graphite-500">{t.data ?? "—"}</span>
                 </div>
               ))}
             </div>

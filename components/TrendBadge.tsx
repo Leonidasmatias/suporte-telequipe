@@ -2,10 +2,10 @@ import type { Tendencia } from "@/lib/imt";
 import { rotuloTendencia } from "@/lib/imt";
 
 const estilos: Record<Tendencia, string> = {
-  subindo: "bg-emerald-50 text-emerald-700",
-  caindo: "bg-red-50 text-red-600",
-  estavel: "bg-slate-100 text-slate-600",
-  indefinido: "bg-slate-50 text-slate-400",
+  subindo: "chip-success",
+  caindo: "chip-danger",
+  estavel: "chip-neutral",
+  indefinido: "bg-transparent text-graphite-600 border-graphite-800",
 };
 
 const setas: Record<Tendencia, string> = {

@@ -6,8 +6,6 @@ import ScoreBar from "@/components/ScoreBar";
 import { criarTreinamentoSugerido } from "./actions";
 import {
   buildColaboradorInsights,
-  buildEquipeInsights,
-  buildLiderInsights,
   buildAlertas,
   buildSugestoesTreinamento,
   calcularTendenciaGeral,
@@ -17,13 +15,11 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default function InsightsOperacionaisPage() {
-  const colaboradores = buildColaboradorInsights();
-  const equipes = buildEquipeInsights();
-  const lideres = buildLiderInsights();
+export default async function InsightsOperacionaisPage() {
+  const colaboradores = await buildColaboradorInsights();
   const alertas = buildAlertas(colaboradores);
   const sugestoes = buildSugestoesTreinamento(colaboradores);
-  const tendenciaGeral = calcularTendenciaGeral();
+  const tendenciaGeral = await calcularTendenciaGeral();
 
   const emEvolucao = colaboradores.filter((c) => c.tendencia === "subindo");
   const emQueda = colaboradores.filter((c) => c.tendencia === "caindo");
@@ -41,10 +37,10 @@ export default function InsightsOperacionaisPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Colaboradores avaliados" value={colaboradores.length} accent="brand" />
-        <StatCard label="Equipes com avaliação" value={equipes.length} accent="slate" />
+        <StatCard label="Em evolução" value={emEvolucao.length} accent="green" />
         <StatCard label="Etapas em alerta" value={alertas.length} accent="amber" />
         <div className="card">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Tendência geral</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-graphite-400">Tendência geral</p>
           <div className="mt-3">
             <TrendBadge tendencia={tendenciaGeral} />
           </div>
@@ -53,8 +49,8 @@ export default function InsightsOperacionaisPage() {
 
       {/* Gargalo operacional */}
       <div className="card mt-8">
-        <h2 className="mb-1 text-base font-semibold text-slate-900">Motor de gargalo operacional</h2>
-        <p className="mb-4 text-xs text-slate-500">
+        <h2 className="mb-1 text-base font-semibold text-white">Motor de gargalo operacional</h2>
+        <p className="mb-4 text-xs text-graphite-500">
           Etapa com a menor média de IMT entre MOS, XML, TX, SWAP, FAM e REVERSA, por colaborador — ordenado do gargalo mais crítico para o menos crítico.
         </p>
         {gargaloOrdenado.length === 0 ? (
@@ -65,8 +61,6 @@ export default function InsightsOperacionaisPage() {
               <thead>
                 <tr>
                   <th>Colaborador</th>
-                  <th>Equipe</th>
-                  <th>Líder</th>
                   <th>IMT médio</th>
                   <th>Etapa crítica</th>
                   <th>Tendência</th>
@@ -75,12 +69,10 @@ export default function InsightsOperacionaisPage() {
               <tbody>
                 {gargaloOrdenado.map((c) => (
                   <tr key={c.id}>
-                    <td className="font-medium text-slate-900">{c.nome}</td>
-                    <td>{c.equipe_nome ?? "—"}</td>
-                    <td>{c.lider_nome ?? "—"}</td>
+                    <td className="font-medium text-white">{c.nome}</td>
                     <td><ScoreBar value={c.mediaGeral} /></td>
                     <td>
-                      <span className="badge bg-red-50 text-red-600">
+                      <span className="badge chip-danger">
                         {NOME_ETAPA[c.gargalo!.etapa]} · {Math.round(c.gargalo!.media)}%
                       </span>
                     </td>
@@ -94,79 +86,37 @@ export default function InsightsOperacionaisPage() {
       </div>
 
       {/* Ranking inteligente */}
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="card">
-          <h2 className="mb-1 text-base font-semibold text-slate-900">Ranking de colaboradores</h2>
-          <p className="mb-4 text-xs text-slate-500">IMT (70%) + consistência (30%)</p>
-          {colaboradores.length === 0 ? (
-            <EmptyState message="Sem dados suficientes." />
-          ) : (
-            <ol className="space-y-2">
-              {colaboradores.slice(0, 8).map((c, i) => (
-                <li key={c.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-sm text-slate-700">
-                    <span className="mr-2 text-xs font-semibold text-slate-400">#{i + 1}</span>
-                    {c.nome}
-                  </span>
-                  <span className="badge bg-brand-50 text-brand-700">{c.rankingScore}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-
-        <div className="card">
-          <h2 className="mb-1 text-base font-semibold text-slate-900">Ranking de equipes</h2>
-          <p className="mb-4 text-xs text-slate-500">IMT (70%) + consistência (30%)</p>
-          {equipes.length === 0 ? (
-            <EmptyState message="Sem dados suficientes." />
-          ) : (
-            <ol className="space-y-2">
-              {equipes.slice(0, 8).map((e, i) => (
-                <li key={e.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-sm text-slate-700">
-                    <span className="mr-2 text-xs font-semibold text-slate-400">#{i + 1}</span>
-                    {e.nome}
-                  </span>
-                  <span className="badge bg-brand-50 text-brand-700">{e.rankingScore}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-
-        <div className="card">
-          <h2 className="mb-1 text-base font-semibold text-slate-900">Ranking de líderes</h2>
-          <p className="mb-4 text-xs text-slate-500">IMT (70%) + consistência (30%)</p>
-          {lideres.length === 0 ? (
-            <EmptyState message="Sem dados suficientes." />
-          ) : (
-            <ol className="space-y-2">
-              {lideres.slice(0, 8).map((l, i) => (
-                <li key={l.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-sm text-slate-700">
-                    <span className="mr-2 text-xs font-semibold text-slate-400">#{i + 1}</span>
-                    {l.nome}
-                  </span>
-                  <span className="badge bg-brand-50 text-brand-700">{l.rankingScore}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
+      <div className="mt-8 card">
+        <h2 className="mb-1 text-base font-semibold text-white">Ranking de colaboradores</h2>
+        <p className="mb-4 text-xs text-graphite-500">IMT (70%) + consistência (30%)</p>
+        {colaboradores.length === 0 ? (
+          <EmptyState message="Sem dados suficientes." />
+        ) : (
+          <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {colaboradores.slice(0, 12).map((c, i) => (
+              <li key={c.id} className="flex items-center justify-between rounded-lg border border-graphite-700 bg-graphite-900/40 px-3 py-2">
+                <span className="text-sm text-graphite-200">
+                  <span className="mr-2 text-xs font-semibold tabular-nums text-graphite-600">#{i + 1}</span>
+                  {c.nome}
+                </span>
+                <span className="badge chip-success tabular-nums">{c.rankingScore}</span>
+              </li>
+            ))}
+          </ol>
+        )}
       </div>
 
       {/* Análise temporal */}
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="card">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">Em evolução</h2>
+          <h2 className="mb-4 text-base font-semibold text-white">Em evolução</h2>
           {emEvolucao.length === 0 ? (
             <EmptyState message="Nenhum colaborador com tendência de alta no momento." />
           ) : (
             <div className="space-y-2">
               {emEvolucao.map((c) => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border border-slate-100 px-3 py-2">
-                  <span className="text-sm text-slate-700">{c.nome}</span>
+                <div key={c.id} className="flex items-center justify-between rounded-lg border border-graphite-700 bg-graphite-900/40 px-3 py-2">
+                  <span className="text-sm text-graphite-200">{c.nome}</span>
                   <TrendBadge tendencia={c.tendencia} />
                 </div>
               ))}
@@ -175,14 +125,14 @@ export default function InsightsOperacionaisPage() {
         </div>
 
         <div className="card">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">Atenção: em queda</h2>
+          <h2 className="mb-4 text-base font-semibold text-white">Atenção: em queda</h2>
           {emQueda.length === 0 ? (
             <EmptyState message="Nenhum colaborador com tendência de queda no momento." />
           ) : (
             <div className="space-y-2">
               {emQueda.map((c) => (
-                <div key={c.id} className="flex items-center justify-between rounded-lg border border-red-100 bg-red-50/40 px-3 py-2">
-                  <span className="text-sm text-slate-700">{c.nome}</span>
+                <div key={c.id} className="flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/[0.04] px-3 py-2">
+                  <span className="text-sm text-graphite-200">{c.nome}</span>
                   <TrendBadge tendencia={c.tendencia} />
                 </div>
               ))}
@@ -193,8 +143,8 @@ export default function InsightsOperacionaisPage() {
 
       {/* Sugestões automáticas de treinamento */}
       <div className="card mt-8">
-        <h2 className="mb-1 text-base font-semibold text-slate-900">Sugestões automáticas de treinamento</h2>
-        <p className="mb-4 text-xs text-slate-500">
+        <h2 className="mb-1 text-base font-semibold text-white">Sugestões automáticas de treinamento</h2>
+        <p className="mb-4 text-xs text-graphite-500">
           Gerado automaticamente sempre que o IMT de uma etapa fica abaixo de {LIMIAR_ALERTA}%.
         </p>
         {sugestoes.length === 0 ? (
@@ -214,9 +164,9 @@ export default function InsightsOperacionaisPage() {
               <tbody>
                 {sugestoes.map((s, i) => (
                   <tr key={`${s.colaborador_id}-${s.etapa}-${i}`}>
-                    <td className="font-medium text-slate-900">{s.colaborador_nome}</td>
+                    <td className="font-medium text-white">{s.colaborador_nome}</td>
                     <td>{s.etapaNome}</td>
-                    <td>{Math.round(s.media)}%</td>
+                    <td className="tabular-nums">{Math.round(s.media)}%</td>
                     <td>{s.treinamentoSugerido}</td>
                     <td>
                       <form action={criarTreinamentoSugerido}>

@@ -1,71 +1,207 @@
-import { db } from "@/lib/db";
+import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import PageHeader from "@/components/PageHeader";
+import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
+import FiltrosColaboradores from "./FiltrosColaboradores";
 import { createColaborador, deleteColaborador } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-type Colaborador = {
-  id: number;
-  nome: string;
-  funcao: string | null;
-  equipe_nome: string | null;
-  telefone: string | null;
-  email: string | null;
-  status: string;
-  data_admissao: string | null;
-};
+type SearchParams = { [key: string]: string | string[] | undefined };
 
-type Equipe = { id: number; nome: string };
+function primeiro(valor: string | string[] | undefined): string {
+  if (Array.isArray(valor)) return valor[0] ?? "";
+  return valor ?? "";
+}
 
-export default function ColaboradoresPage() {
-  const colaboradores = db
-    .prepare(
-      `SELECT c.id, c.nome, c.funcao, e.nome as equipe_nome, c.telefone, c.email, c.status, c.data_admissao
-       FROM colaboradores c
-       LEFT JOIN equipes e ON e.id = c.equipe_id
-       ORDER BY c.nome ASC`
-    )
-    .all() as Colaborador[];
+const PAGE_SIZE = 25;
 
-  const equipes = db.prepare("SELECT id, nome FROM equipes ORDER BY nome ASC").all() as Equipe[];
+const CAMPOS_ORDENAVEIS = ["nome", "regional", "empresaNome", "cargo", "status", "ultimaAtualizacao"] as const;
+type CampoOrdenavel = (typeof CAMPOS_ORDENAVEIS)[number];
+
+function ehCampoOrdenavel(valor: string): valor is CampoOrdenavel {
+  return (CAMPOS_ORDENAVEIS as readonly string[]).includes(valor);
+}
+
+export default async function ColaboradoresPage({ searchParams }: { searchParams: SearchParams }) {
+  const q = primeiro(searchParams.q);
+  const tipoPessoa = primeiro(searchParams.tipoPessoa);
+  const regional = primeiro(searchParams.regional);
+  const empresa = primeiro(searchParams.empresa);
+  const cargo = primeiro(searchParams.cargo);
+  const status = primeiro(searchParams.status);
+  const sortRaw = primeiro(searchParams.sort);
+  const sort: CampoOrdenavel = ehCampoOrdenavel(sortRaw) ? sortRaw : "nome";
+  const dir: "asc" | "desc" = primeiro(searchParams.dir) === "desc" ? "desc" : "asc";
+  const page = Math.max(1, Number(primeiro(searchParams.page)) || 1);
+
+  const where: Prisma.ColaboradorWhereInput = {};
+  const and: Prisma.ColaboradorWhereInput[] = [];
+  if (q) {
+    and.push({
+      OR: [
+        { nome: { contains: q, mode: "insensitive" } },
+        { cadastro: { contains: q, mode: "insensitive" } },
+        { telefone: { contains: q, mode: "insensitive" } },
+      ],
+    });
+  }
+  if (tipoPessoa) and.push({ tipoPessoa });
+  if (regional) and.push({ regional });
+  if (empresa) and.push({ empresaNome: empresa });
+  if (cargo) and.push({ cargo });
+  if (status) and.push({ status });
+  if (and.length > 0) where.AND = and;
+
+  const [
+    totalGeral,
+    totalAtivos,
+    totalCLT,
+    totalPJ,
+    ultimaImportacaoAgg,
+    ultimaAtualizacaoAgg,
+    tiposPessoaRaw,
+    regionaisRaw,
+    empresasRaw,
+    cargosRaw,
+    totalFiltrado,
+    colaboradores,
+  ] = await Promise.all([
+    prisma.colaborador.count(),
+    prisma.colaborador.count({ where: { status: "ativo" } }),
+    prisma.colaborador.count({ where: { tipoPessoa: "CLT" } }),
+    prisma.colaborador.count({ where: { tipoPessoa: "PJ" } }),
+    prisma.colaborador.aggregate({ _max: { dataImportacao: true } }),
+    prisma.colaborador.aggregate({ _max: { ultimaAtualizacao: true } }),
+    prisma.colaborador.findMany({ where: { tipoPessoa: { not: null } }, distinct: ["tipoPessoa"], select: { tipoPessoa: true }, orderBy: { tipoPessoa: "asc" } }),
+    prisma.colaborador.findMany({ where: { regional: { not: null } }, distinct: ["regional"], select: { regional: true }, orderBy: { regional: "asc" } }),
+    prisma.colaborador.findMany({ where: { empresaNome: { not: null } }, distinct: ["empresaNome"], select: { empresaNome: true }, orderBy: { empresaNome: "asc" } }),
+    prisma.colaborador.findMany({ where: { cargo: { not: null } }, distinct: ["cargo"], select: { cargo: true }, orderBy: { cargo: "asc" } }),
+    prisma.colaborador.count({ where }),
+    prisma.colaborador.findMany({
+      where,
+      orderBy: { [sort]: dir },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+  ]);
+
+  const totalInativos = totalGeral - totalAtivos;
+  const totalPaginas = Math.max(1, Math.ceil(totalFiltrado / PAGE_SIZE));
+  const opcoes = {
+    tiposPessoa: tiposPessoaRaw.map((t) => t.tipoPessoa!).filter(Boolean),
+    regionais: regionaisRaw.map((r) => r.regional!).filter(Boolean),
+    empresas: empresasRaw.map((e) => e.empresaNome!).filter(Boolean),
+    cargos: cargosRaw.map((c) => c.cargo!).filter(Boolean),
+  };
+
+  function linkOrdenacao(campo: CampoOrdenavel, label: string) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (tipoPessoa) params.set("tipoPessoa", tipoPessoa);
+    if (regional) params.set("regional", regional);
+    if (empresa) params.set("empresa", empresa);
+    if (cargo) params.set("cargo", cargo);
+    if (status) params.set("status", status);
+    params.set("sort", campo);
+    params.set("dir", sort === campo && dir === "asc" ? "desc" : "asc");
+    const ativo = sort === campo;
+    return (
+      <Link href={`/colaboradores?${params.toString()}`} className="inline-flex items-center gap-1 hover:text-graphite-100">
+        {label}
+        {ativo && <span className="text-neon-400">{dir === "asc" ? "▲" : "▼"}</span>}
+      </Link>
+    );
+  }
+
+  function linkPagina(novaPagina: number) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (tipoPessoa) params.set("tipoPessoa", tipoPessoa);
+    if (regional) params.set("regional", regional);
+    if (empresa) params.set("empresa", empresa);
+    if (cargo) params.set("cargo", cargo);
+    if (status) params.set("status", status);
+    params.set("sort", sort);
+    params.set("dir", dir);
+    params.set("page", String(novaPagina));
+    return `/colaboradores?${params.toString()}`;
+  }
 
   return (
     <div>
-      <PageHeader title="Colaboradores" description="Técnicos de campo vinculados às equipes operacionais." />
+      <PageHeader
+        title="Colaboradores"
+        description="Cadastro Mestre de Colaboradores — fonte única de verdade, sincronizada por Importação Massiva (Smart Sync)."
+        action={
+          <Link href="/importacao" className="btn-primary">
+            Importar planilha
+          </Link>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
+        <StatCard label="Total de colaboradores" value={totalGeral} accent="brand" />
+        <StatCard label="Ativos" value={totalAtivos} accent="green" />
+        <StatCard label="Inativos" value={totalInativos} accent="slate" />
+        <StatCard label="CLT" value={totalCLT} accent="brand" />
+        <StatCard label="PJ" value={totalPJ} accent="amber" />
+        <div className="card">
+          <p className="text-xs font-medium uppercase tracking-wide text-graphite-400">Última sincronização</p>
+          <p className="mt-2 text-sm font-medium text-graphite-100">
+            {ultimaImportacaoAgg._max.dataImportacao
+              ? ultimaImportacaoAgg._max.dataImportacao.toISOString().slice(0, 16).replace("T", " ")
+              : "—"}
+          </p>
+          <p className="mt-1 text-xs text-graphite-500">
+            Última atualização:{" "}
+            {ultimaAtualizacaoAgg._max.ultimaAtualizacao
+              ? ultimaAtualizacaoAgg._max.ultimaAtualizacao.toISOString().slice(0, 16).replace("T", " ")
+              : "—"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <FiltrosColaboradores opcoes={opcoes} />
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="card lg:col-span-1">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">Novo colaborador</h2>
+          <h2 className="mb-4 text-base font-semibold text-white">Novo colaborador</h2>
+          <p className="mb-4 text-xs text-graphite-500">
+            Cadastro manual pontual. A forma oficial de manter o Cadastro Mestre atualizado é a Importação Massiva.
+          </p>
           <form action={createColaborador} className="space-y-4">
             <div>
               <label className="label-field">Nome</label>
               <input name="nome" required className="input-field" placeholder="Nome completo" />
             </div>
             <div>
-              <label className="label-field">Função</label>
-              <input name="funcao" className="input-field" placeholder="Ex: Técnico de Campo" />
+              <label className="label-field">TipoPessoa</label>
+              <input name="tipo_pessoa" className="input-field" placeholder="Ex: CLT, PJ" />
             </div>
             <div>
-              <label className="label-field">Equipe</label>
-              <select name="equipe_id" className="input-field">
-                <option value="">Sem equipe definida</option>
-                {equipes.map((e) => (
-                  <option key={e.id} value={e.id}>{e.nome}</option>
-                ))}
-              </select>
+              <label className="label-field">Regional</label>
+              <input name="regional" className="input-field" placeholder="Ex: Regional Sul" />
+            </div>
+            <div>
+              <label className="label-field">Cadastro</label>
+              <input name="cadastro" className="input-field" placeholder="Matrícula" />
+            </div>
+            <div>
+              <label className="label-field">Empresa</label>
+              <input name="empresa_nome" className="input-field" placeholder="Nome da empresa" />
+            </div>
+            <div>
+              <label className="label-field">Cargo</label>
+              <input name="cargo" className="input-field" placeholder="Ex: Instalador Senior I" />
             </div>
             <div>
               <label className="label-field">Telefone</label>
               <input name="telefone" className="input-field" placeholder="(00) 00000-0000" />
-            </div>
-            <div>
-              <label className="label-field">E-mail</label>
-              <input name="email" type="email" className="input-field" placeholder="email@empresa.com" />
-            </div>
-            <div>
-              <label className="label-field">Data de admissão</label>
-              <input name="data_admissao" type="date" className="input-field" />
             </div>
             <div>
               <label className="label-field">Status</label>
@@ -79,51 +215,78 @@ export default function ColaboradoresPage() {
         </div>
 
         <div className="card lg:col-span-2">
-          <h2 className="mb-4 text-base font-semibold text-slate-900">
-            Colaboradores cadastrados ({colaboradores.length})
+          <h2 className="mb-4 text-base font-semibold text-white">
+            Colaboradores ({totalFiltrado} de {totalGeral})
           </h2>
           {colaboradores.length === 0 ? (
-            <EmptyState message="Nenhum colaborador cadastrado ainda." />
+            <EmptyState message="Nenhum colaborador encontrado para os filtros selecionados." />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="table-base">
-                <thead>
-                  <tr>
-                    <th>Nome</th>
-                    <th>Função</th>
-                    <th>Equipe</th>
-                    <th>Status</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {colaboradores.map((c) => (
-                    <tr key={c.id}>
-                      <td className="font-medium text-slate-900">{c.nome}</td>
-                      <td>{c.funcao || "—"}</td>
-                      <td>{c.equipe_nome || "—"}</td>
-                      <td>
-                        <span
-                          className={`badge ${
-                            c.status === "ativo"
-                              ? "bg-emerald-50 text-emerald-700"
-                              : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {c.status}
-                        </span>
-                      </td>
-                      <td>
-                        <form action={deleteColaborador}>
-                          <input type="hidden" name="id" value={c.id} />
-                          <button type="submit" className="btn-danger">Remover</button>
-                        </form>
-                      </td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="table-base">
+                  <thead>
+                    <tr>
+                      <th>{linkOrdenacao("nome", "Nome")}</th>
+                      <th>TipoPessoa</th>
+                      <th>{linkOrdenacao("regional", "Regional")}</th>
+                      <th>{linkOrdenacao("empresaNome", "Empresa")}</th>
+                      <th>{linkOrdenacao("cargo", "Cargo")}</th>
+                      <th>Cadastro</th>
+                      <th>Telefone</th>
+                      <th>{linkOrdenacao("status", "Status")}</th>
+                      <th></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {colaboradores.map((c) => (
+                      <tr key={c.id}>
+                        <td className="font-medium text-white">{c.nome}</td>
+                        <td>{c.tipoPessoa || "—"}</td>
+                        <td>{c.regional || "—"}</td>
+                        <td>{c.empresaNome || "—"}</td>
+                        <td>{c.cargo || "—"}</td>
+                        <td className="font-mono text-xs">{c.cadastro || "—"}</td>
+                        <td>{c.telefone || "—"}</td>
+                        <td>
+                          <span className={`badge ${c.status === "ativo" ? "chip-success" : "chip-neutral"}`}>
+                            {c.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="flex gap-2">
+                            <Link href={`/colaboradores/${c.id}`} className="btn-secondary">Ver histórico</Link>
+                            <form action={deleteColaborador}>
+                              <input type="hidden" name="id" value={c.id} />
+                              <button type="submit" className="btn-danger">Remover</button>
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between text-sm text-graphite-400">
+                <span>
+                  Página {page} de {totalPaginas}
+                </span>
+                <div className="flex gap-2">
+                  <Link
+                    href={linkPagina(Math.max(1, page - 1))}
+                    className={`btn-secondary ${page <= 1 ? "pointer-events-none opacity-40" : ""}`}
+                  >
+                    Anterior
+                  </Link>
+                  <Link
+                    href={linkPagina(Math.min(totalPaginas, page + 1))}
+                    className={`btn-secondary ${page >= totalPaginas ? "pointer-events-none opacity-40" : ""}`}
+                  >
+                    Próxima
+                  </Link>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>

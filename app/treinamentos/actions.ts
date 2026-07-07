@@ -1,21 +1,26 @@
 "use server";
 
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
 export async function createTreinamento(formData: FormData) {
-  const nome = String(formData.get("nome") || "").trim();
+  const titulo = String(formData.get("nome") || "").trim();
   const categoria = String(formData.get("categoria") || "").trim();
-  const cargaHoraria = Number(formData.get("carga_horaria") || 0);
-  const dataRealizacao = String(formData.get("data_realizacao") || "");
+  const cargaHorariaRaw = Number(formData.get("carga_horaria") || 0);
+  const dataRaw = String(formData.get("data_realizacao") || "");
   const instrutor = String(formData.get("instrutor") || "").trim();
 
-  if (!nome) return;
+  if (!titulo) return;
 
-  db.prepare(
-    `INSERT INTO treinamentos (nome, categoria, carga_horaria, data_realizacao, instrutor)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(nome, categoria, cargaHoraria || null, dataRealizacao || null, instrutor);
+  await prisma.treinamento.create({
+    data: {
+      titulo,
+      categoria: categoria || null,
+      cargaHoraria: cargaHorariaRaw || null,
+      data: dataRaw ? new Date(dataRaw) : null,
+      instrutor: instrutor || null,
+    },
+  });
 
   revalidatePath("/treinamentos");
   revalidatePath("/home");
@@ -24,7 +29,7 @@ export async function createTreinamento(formData: FormData) {
 export async function deleteTreinamento(formData: FormData) {
   const id = Number(formData.get("id"));
   if (!id) return;
-  db.prepare("DELETE FROM treinamentos WHERE id = ?").run(id);
+  await prisma.treinamento.delete({ where: { id } });
   revalidatePath("/treinamentos");
   revalidatePath("/home");
 }
