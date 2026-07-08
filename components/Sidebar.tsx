@@ -93,6 +93,22 @@ export default function Sidebar() {
           <p className="text-xs text-graphite-400">Sistema operacional</p>
         </div>
         <p className="mt-1 text-[11px] text-graphite-600">v6.0 · Suporte Telequipe</p>
+
+        <div className="mt-3 border-t border-graphite-800 pt-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-graphite-600">
+            Desenvolvido por
+          </p>
+          <p className="mt-1 text-xs font-medium text-graphite-300">Leônidas Matias</p>
+          <a href="tel:+5511937299687" className="mt-0.5 block text-[11px] text-graphite-500 hover:text-neon-400">
+            (11) 93729-9687
+          </a>
+          <a
+            href="mailto:leonidasmatias81@gmail.com"
+            className="block text-[11px] text-graphite-500 hover:text-neon-400"
+          >
+            leonidasmatias81@gmail.com
+          </a>
+        </div>
       </div>
     </aside>
   );
