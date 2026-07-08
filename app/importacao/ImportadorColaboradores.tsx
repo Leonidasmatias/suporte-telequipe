@@ -164,7 +164,7 @@ export default function ImportadorColaboradores() {
                       <th>Nome</th>
                       <th>TipoPessoa</th>
                       <th>Regional</th>
-                      <th>Cadastro</th>
+                      <th>Operadoras/Clientes</th>
                       <th>Empresa</th>
                       <th>Cargo</th>
                       <th>Telefone</th>
@@ -219,7 +219,7 @@ function LinhaColaborador({ pessoa }: { pessoa: ColaboradorImportado }) {
       <td className="font-medium text-white">{pessoa.nome || "—"}</td>
       <td>{pessoa.tipoPessoa || "—"}</td>
       <td>{pessoa.regional || "—"}</td>
-      <td className="font-mono text-xs">{pessoa.cadastro || "—"}</td>
+      <td className="text-xs">{pessoa.operadoras || "—"}</td>
       <td>{pessoa.empresaNome || "—"}</td>
       <td>{pessoa.cargo || "—"}</td>
       <td>{pessoa.telefone || "—"}</td>

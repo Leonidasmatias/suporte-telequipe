@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import {
   analisarWorkbookColaboradores,
+  calcularNomeNormalizado,
   compararComBancoColaboradores,
   sincronizarColaboradores,
   type ColaboradorImportado,
@@ -101,7 +102,7 @@ export async function createColaborador(formData: FormData) {
   const nome = String(formData.get("nome") || "").trim();
   const tipoPessoa = String(formData.get("tipo_pessoa") || "").trim();
   const regional = String(formData.get("regional") || "").trim();
-  const cadastro = String(formData.get("cadastro") || "").trim();
+  const operadoras = String(formData.get("operadoras") || "").trim();
   const empresaNome = String(formData.get("empresa_nome") || "").trim();
   const cargo = String(formData.get("cargo") || "").trim();
   const telefone = String(formData.get("telefone") || "").trim();
@@ -111,19 +112,28 @@ export async function createColaborador(formData: FormData) {
 
   const agora = new Date();
 
-  await prisma.colaborador.create({
-    data: {
-      nome,
-      tipoPessoa: tipoPessoa || null,
-      regional: regional || null,
-      cadastro: cadastro || null,
-      empresaNome: empresaNome || null,
-      cargo: cargo || null,
-      telefone: telefone || null,
-      status,
-      ultimaAtualizacao: agora,
-    },
-  });
+  try {
+    await prisma.colaborador.create({
+      data: {
+        nome,
+        nomeNormalizado: calcularNomeNormalizado(nome),
+        tipoPessoa: tipoPessoa || null,
+        regional: regional || null,
+        operadoras: operadoras || null,
+        empresaNome: empresaNome || null,
+        cargo: cargo || null,
+        telefone: telefone || null,
+        status,
+        ultimaAtualizacao: agora,
+      },
+    });
+  } catch (e) {
+    // P2002 = violação de unicidade em nomeNormalizado: já existe um
+    // colaborador com esse mesmo nome (a chave de identificação do Smart
+    // Sync). Silencioso de propósito — o formulário não tem um canal de
+    // erro dedicado hoje; a listagem simplesmente não ganha um duplicado.
+    console.error("Erro ao criar colaborador (possível nome duplicado):", e);
+  }
 
   revalidatePath("/colaboradores");
   revalidatePath("/home");
@@ -136,7 +146,7 @@ export async function updateColaborador(formData: FormData) {
   const nome = String(formData.get("nome") || "").trim();
   const tipoPessoa = String(formData.get("tipo_pessoa") || "").trim();
   const regional = String(formData.get("regional") || "").trim();
-  const cadastro = String(formData.get("cadastro") || "").trim();
+  const operadoras = String(formData.get("operadoras") || "").trim();
   const empresaNome = String(formData.get("empresa_nome") || "").trim();
   const cargo = String(formData.get("cargo") || "").trim();
   const telefone = String(formData.get("telefone") || "").trim();
@@ -144,23 +154,49 @@ export async function updateColaborador(formData: FormData) {
 
   if (!nome) return;
 
-  await prisma.colaborador.update({
-    where: { id },
-    data: {
-      nome,
-      tipoPessoa: tipoPessoa || null,
-      regional: regional || null,
-      cadastro: cadastro || null,
-      empresaNome: empresaNome || null,
-      cargo: cargo || null,
-      telefone: telefone || null,
-      status,
-      ultimaAtualizacao: new Date(),
-    },
-  });
+  try {
+    await prisma.colaborador.update({
+      where: { id },
+      data: {
+        nome,
+        nomeNormalizado: calcularNomeNormalizado(nome),
+        tipoPessoa: tipoPessoa || null,
+        regional: regional || null,
+        operadoras: operadoras || null,
+        empresaNome: empresaNome || null,
+        cargo: cargo || null,
+        telefone: telefone || null,
+        status,
+        ultimaAtualizacao: new Date(),
+      },
+    });
+  } catch (e) {
+    console.error("Erro ao atualizar colaborador (possível nome duplicado):", e);
+  }
 
   revalidatePath("/colaboradores");
   revalidatePath("/home");
+}
+
+/** Alterna o status do colaborador entre "ativo" e "inativo" em um clique, sem precisar abrir um formulário de edição. */
+export async function toggleColaboradorStatus(formData: FormData) {
+  const id = Number(formData.get("id"));
+  if (!id) return;
+
+  const atual = await prisma.colaborador.findUnique({ where: { id }, select: { status: true } });
+  if (!atual) return;
+
+  const novoStatus = atual.status === "ativo" ? "inativo" : "ativo";
+  await prisma.colaborador.update({
+    where: { id },
+    data: { status: novoStatus, ultimaAtualizacao: new Date() },
+  });
+
+  revalidatePath("/colaboradores");
+  revalidatePath(`/colaboradores/${id}`);
+  revalidatePath("/home");
+  revalidatePath("/suporte");
+  revalidatePath("/suporte/novo");
 }
 
 export async function deleteColaborador(formData: FormData) {

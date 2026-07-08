@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
 import FiltrosColaboradores from "./FiltrosColaboradores";
-import { createColaborador, deleteColaborador } from "./actions";
+import { createColaborador, deleteColaborador, toggleColaboradorStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
     and.push({
       OR: [
         { nome: { contains: q, mode: "insensitive" } },
-        { cadastro: { contains: q, mode: "insensitive" } },
+        { operadoras: { contains: q, mode: "insensitive" } },
         { telefone: { contains: q, mode: "insensitive" } },
       ],
     });
@@ -58,8 +59,7 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
   const [
     totalGeral,
     totalAtivos,
-    totalCLT,
-    totalPJ,
+    tipoPessoaBreakdown,
     ultimaImportacaoAgg,
     ultimaAtualizacaoAgg,
     tiposPessoaRaw,
@@ -71,8 +71,12 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
   ] = await Promise.all([
     prisma.colaborador.count(),
     prisma.colaborador.count({ where: { status: "ativo" } }),
-    prisma.colaborador.count({ where: { tipoPessoa: "CLT" } }),
-    prisma.colaborador.count({ where: { tipoPessoa: "PJ" } }),
+    prisma.colaborador.groupBy({
+      by: ["tipoPessoa"],
+      where: { tipoPessoa: { not: null } },
+      _count: { _all: true },
+      orderBy: { tipoPessoa: "asc" },
+    }),
     prisma.colaborador.aggregate({ _max: { dataImportacao: true } }),
     prisma.colaborador.aggregate({ _max: { ultimaAtualizacao: true } }),
     prisma.colaborador.findMany({ where: { tipoPessoa: { not: null } }, distinct: ["tipoPessoa"], select: { tipoPessoa: true }, orderBy: { tipoPessoa: "asc" } }),
@@ -146,8 +150,14 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
         <StatCard label="Total de colaboradores" value={totalGeral} accent="brand" />
         <StatCard label="Ativos" value={totalAtivos} accent="green" />
         <StatCard label="Inativos" value={totalInativos} accent="slate" />
-        <StatCard label="CLT" value={totalCLT} accent="brand" />
-        <StatCard label="PJ" value={totalPJ} accent="amber" />
+        {tipoPessoaBreakdown.map((t, i) => (
+          <StatCard
+            key={t.tipoPessoa}
+            label={t.tipoPessoa!}
+            value={t._count._all}
+            accent={(["brand", "amber", "green", "slate"] as const)[i % 4]}
+          />
+        ))}
         <div className="card">
           <p className="text-xs font-medium uppercase tracking-wide text-graphite-400">Última sincronização</p>
           <p className="mt-2 text-sm font-medium text-graphite-100">
@@ -165,7 +175,9 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
       </div>
 
       <div className="mt-6">
-        <FiltrosColaboradores opcoes={opcoes} />
+        <Suspense fallback={<div className="card h-[172px] animate-pulse" />}>
+          <FiltrosColaboradores opcoes={opcoes} />
+        </Suspense>
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -188,8 +200,8 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
               <input name="regional" className="input-field" placeholder="Ex: Regional Sul" />
             </div>
             <div>
-              <label className="label-field">Cadastro</label>
-              <input name="cadastro" className="input-field" placeholder="Matrícula" />
+              <label className="label-field">Operadoras/Clientes</label>
+              <input name="operadoras" className="input-field" placeholder="Ex: ERICSSON/NOKIA" />
             </div>
             <div>
               <label className="label-field">Empresa</label>
@@ -231,7 +243,7 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
                       <th>{linkOrdenacao("regional", "Regional")}</th>
                       <th>{linkOrdenacao("empresaNome", "Empresa")}</th>
                       <th>{linkOrdenacao("cargo", "Cargo")}</th>
-                      <th>Cadastro</th>
+                      <th>Operadoras/Clientes</th>
                       <th>Telefone</th>
                       <th>{linkOrdenacao("status", "Status")}</th>
                       <th></th>
@@ -245,12 +257,19 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
                         <td>{c.regional || "—"}</td>
                         <td>{c.empresaNome || "—"}</td>
                         <td>{c.cargo || "—"}</td>
-                        <td className="font-mono text-xs">{c.cadastro || "—"}</td>
+                        <td className="text-xs">{c.operadoras || "—"}</td>
                         <td>{c.telefone || "—"}</td>
                         <td>
-                          <span className={`badge ${c.status === "ativo" ? "chip-success" : "chip-neutral"}`}>
-                            {c.status}
-                          </span>
+                          <form action={toggleColaboradorStatus}>
+                            <input type="hidden" name="id" value={c.id} />
+                            <button
+                              type="submit"
+                              className={`badge cursor-pointer transition-opacity hover:opacity-75 ${c.status === "ativo" ? "chip-success" : "chip-neutral"}`}
+                              title={c.status === "ativo" ? "Clique para marcar como inativo" : "Clique para marcar como ativo"}
+                            >
+                              {c.status}
+                            </button>
+                          </form>
                         </td>
                         <td>
                           <div className="flex gap-2">

@@ -4,8 +4,12 @@
  *
  * V6: adaptado para o Cadastro Mestre de Colaboradores — não existem mais
  * líderes/equipes; todo profissional é um Colaborador, com TipoPessoa,
- * Regional, Cadastro (matrícula), EmpresaNome, Cargo e Telefone (mesmos
+ * Regional, Operadoras/Clientes, EmpresaNome, Cargo e Telefone (mesmos
  * campos trazidos pela Importação Massiva/Smart Sync).
+ *
+ * V6.1: `cadastro` foi renomeado para `operadoras` (não é mais um
+ * identificador único — ver nota no topo de lib/colaboradores.ts) e a
+ * identidade de cada colaborador passou a ser `nomeNormalizado`.
  *
  * Rodar com: npm run seed
  * (ou: npx prisma db seed)
@@ -38,9 +42,10 @@ async function main() {
   const c1 = await prisma.colaborador.create({
     data: {
       nome: "João Pedro Lima",
+      nomeNormalizado: "JOAO PEDRO LIMA",
       tipoPessoa: "CLT",
       regional: "Regional Sul",
-      cadastro: "10001",
+      operadoras: "NOKIA",
       empresaNome: "Telequipe",
       cargo: "Instalador Senior I",
       telefone: "51 99123-0001",
@@ -52,9 +57,10 @@ async function main() {
   const c2 = await prisma.colaborador.create({
     data: {
       nome: "Marcos Vinícius",
-      tipoPessoa: "PJ",
+      nomeNormalizado: "MARCOS VINICIUS",
+      tipoPessoa: "PJ - EXTERNO",
       regional: "Regional Sul",
-      cadastro: "10002",
+      operadoras: "ERICSSON/NOKIA",
       empresaNome: "Telequipe",
       cargo: "Instalador",
       telefone: "51 99123-0002",
@@ -66,9 +72,10 @@ async function main() {
   const c3 = await prisma.colaborador.create({
     data: {
       nome: "Fernanda Rocha",
+      nomeNormalizado: "FERNANDA ROCHA",
       tipoPessoa: "CLT",
       regional: "Regional Sudeste",
-      cadastro: "10003",
+      operadoras: "TELEFONICA",
       empresaNome: "Telequipe",
       cargo: "Técnica de Manutenção",
       telefone: "11 99123-0003",
@@ -80,9 +87,10 @@ async function main() {
   const c4 = await prisma.colaborador.create({
     data: {
       nome: "Rafael Torres",
-      tipoPessoa: "CLT",
+      nomeNormalizado: "RAFAEL TORRES",
+      tipoPessoa: "PJ - INTERNO",
       regional: "Regional Sudeste",
-      cadastro: "10004",
+      operadoras: "HUAWEI/NOKIA",
       empresaNome: "Telequipe",
       cargo: "Supervisor",
       telefone: "11 99123-0004",

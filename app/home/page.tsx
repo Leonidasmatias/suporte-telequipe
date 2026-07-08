@@ -18,8 +18,7 @@ export default async function HomePage() {
   const [
     totalColaboradores,
     totalAtivos,
-    totalCLT,
-    totalPJ,
+    tipoPessoaBreakdown,
     totalTreinamentos,
     imtAgg,
     ultimaImportacaoAgg,
@@ -27,8 +26,12 @@ export default async function HomePage() {
   ] = await Promise.all([
     prisma.colaborador.count(),
     prisma.colaborador.count({ where: { status: "ativo" } }),
-    prisma.colaborador.count({ where: { tipoPessoa: "CLT" } }),
-    prisma.colaborador.count({ where: { tipoPessoa: "PJ" } }),
+    prisma.colaborador.groupBy({
+      by: ["tipoPessoa"],
+      where: { tipoPessoa: { not: null } },
+      _count: { _all: true },
+      orderBy: { tipoPessoa: "asc" },
+    }),
     prisma.treinamento.count(),
     prisma.avaliacaoCompetencia.aggregate({ _avg: { nota: true } }),
     prisma.colaborador.aggregate({ _max: { dataImportacao: true } }),
@@ -80,8 +83,14 @@ export default async function HomePage() {
         <StatCard label="Colaboradores" value={totalColaboradores} accent="brand" />
         <StatCard label="Ativos" value={totalAtivos} accent="green" />
         <StatCard label="Inativos" value={totalInativos} accent="slate" />
-        <StatCard label="CLT" value={totalCLT} accent="brand" />
-        <StatCard label="PJ" value={totalPJ} accent="amber" />
+        {tipoPessoaBreakdown.map((t, i) => (
+          <StatCard
+            key={t.tipoPessoa}
+            label={t.tipoPessoa!}
+            value={t._count._all}
+            accent={(["brand", "amber", "green", "slate"] as const)[i % 4]}
+          />
+        ))}
         <StatCard label="Treinamentos" value={totalTreinamentos} accent="slate" />
       </div>
 

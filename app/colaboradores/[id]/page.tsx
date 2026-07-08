@@ -5,6 +5,7 @@ import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
 import { formatarTempo } from "@/lib/suporte";
+import { toggleColaboradorStatus } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +50,16 @@ export default async function ColaboradorDetalhePage({ params }: { params: { id:
         description={[colaborador.cargo, colaborador.empresaNome].filter(Boolean).join(" · ") || "Colaborador"}
         action={
           <div className="flex items-center gap-3">
-            <span className={`badge ${colaborador.status === "ativo" ? "chip-success" : "chip-neutral"}`}>
-              {colaborador.status}
-            </span>
+            <form action={toggleColaboradorStatus}>
+              <input type="hidden" name="id" value={colaborador.id} />
+              <button
+                type="submit"
+                className={`badge cursor-pointer transition-opacity hover:opacity-75 ${colaborador.status === "ativo" ? "chip-success" : "chip-neutral"}`}
+                title={colaborador.status === "ativo" ? "Clique para marcar como inativo" : "Clique para marcar como ativo"}
+              >
+                {colaborador.status}
+              </button>
+            </form>
             <Link href="/colaboradores" className="btn-secondary">
               Voltar para colaboradores
             </Link>
@@ -101,8 +109,8 @@ export default async function ColaboradorDetalhePage({ params }: { params: { id:
               <dd className="text-graphite-200">{colaborador.cargo || "—"}</dd>
             </div>
             <div>
-              <dt className="label-field">Cadastro</dt>
-              <dd className="font-mono text-graphite-200">{colaborador.cadastro || "—"}</dd>
+              <dt className="label-field">Operadoras/Clientes</dt>
+              <dd className="text-graphite-200">{colaborador.operadoras || "—"}</dd>
             </div>
             <div>
               <dt className="label-field">Telefone</dt>

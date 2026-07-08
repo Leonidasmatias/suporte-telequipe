@@ -12,7 +12,7 @@ type Opcoes = {
 
 /**
  * Barra de filtros do Cadastro Mestre de Colaboradores. A busca por texto
- * (nome/cadastro/telefone) é "instantânea": dispara automaticamente 350ms
+ * (nome/operadoras/telefone) é "instantânea": dispara automaticamente 350ms
  * depois que o usuário para de digitar, sem precisar clicar em um botão.
  * Os demais filtros (selects) aplicam assim que o usuário escolhe uma opção.
  * Tudo é feito via querystring (server-driven), sem estado de dados no
@@ -50,7 +50,7 @@ export default function FiltrosColaboradores({ opcoes }: { opcoes: Opcoes }) {
       <h2 className="mb-4 text-base font-semibold text-white">Pesquisa instantânea e filtros</h2>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="lg:col-span-2">
-          <label className="label-field">Buscar (nome, cadastro ou telefone)</label>
+          <label className="label-field">Buscar (nome, operadoras ou telefone)</label>
           <input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}

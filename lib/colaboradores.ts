@@ -20,10 +20,20 @@ import { prisma } from "@/lib/prisma";
  *     atualiza quem existe e mudou, e marca como "inativo" (nunca exclui)
  *     quem estava ativo no banco mas não apareceu neste arquivo.
  *
- * Não usamos CPF/RG como identidade (proibido pela nova arquitetura). A
- * chave natural de deduplicação é `cadastro` (matrícula, estável e única
- * por decisão do usuário); quando um registro não tem `cadastro`, cai-se
- * para uma chave composta Nome + EmpresaNome + Telefone normalizados.
+ * V6.1 — AJUSTE PÓS-ANÁLISE DA PLANILHA REAL: a coluna "Cadastro" do arquivo
+ * oficial NÃO é matrícula/ID único — na prática lista as operadoras/clientes
+ * atendidos pelo colaborador (ex.: "ERICSSON/NOKIA"), repete entre pessoas
+ * diferentes e frequentemente vem vazia. Por isso ela vira apenas o campo
+ * informativo `operadoras` e NÃO é mais usada para identificação. A chave
+ * natural de deduplicação do Smart Sync passou a ser o NOME normalizado
+ * (maiúsculas, sem acento, espaços colapsados) — não usamos CPF/RG como
+ * identidade (proibido pela arquitetura V6).
+ *
+ * Também foi observado que, em parte das linhas, a coluna EmpresaNome vem
+ * preenchida com "Nome da Pessoa + número de documento (tipo CPF)" em vez do
+ * nome da empresa — normalmente colaboradores autônomos sem empresa formal.
+ * `limparEmpresaNome` detecta esse padrão e descarta o número automaticamente
+ * (o número nunca é gravado em lugar nenhum do sistema).
  */
 
 export type StatusPrevisto = "novo" | "atualizacao" | "sem_alteracao";
@@ -33,7 +43,7 @@ export type ColaboradorImportado = {
   nome: string;
   tipoPessoa: string | null;
   regional: string | null;
-  cadastro: string | null;
+  operadoras: string | null;
   empresaNome: string | null;
   cargo: string | null;
   telefone: string | null;
@@ -67,13 +77,13 @@ export type RelatorioSincronizacao = {
   tempoProcessamentoMs: number;
 };
 
-type CampoColaborador = "nome" | "tipoPessoa" | "regional" | "cadastro" | "empresaNome" | "cargo" | "telefone";
+type CampoColaborador = "nome" | "tipoPessoa" | "regional" | "operadoras" | "empresaNome" | "cargo" | "telefone";
 
 const ALIASES: Record<CampoColaborador, string[]> = {
   nome: ["nome", "nome completo", "colaborador", "funcionario", "funcionário"],
   tipoPessoa: ["tipopessoa", "tipo pessoa", "tipo", "vinculo", "vínculo", "regime"],
   regional: ["regional", "regiao", "região"],
-  cadastro: ["cadastro", "matricula", "matrícula", "codigo", "código", "registro"],
+  operadoras: ["cadastro", "operadoras", "operadora", "clientes", "operadoras/clientes", "operadoras clientes"],
   empresaNome: ["empresanome", "empresa", "empresa nome", "nome empresa", "razao social", "razão social"],
   cargo: ["cargo", "funcao", "função", "role", "posicao", "posição"],
   telefone: ["telefone", "telefone de contato", "contato", "celular", "whatsapp", "fone"],
@@ -108,18 +118,45 @@ function normalizarTelefone(valor: unknown): string | null {
   return digitos;
 }
 
-function apenasDigitos(valor: string | null | undefined): string {
-  return String(valor ?? "").replace(/\D/g, "");
-}
-
-/** Chave composta de fallback quando não há `cadastro`: nome + empresa + telefone normalizados. */
-function chaveComposta(nome: string, empresaNome: string | null, telefone: string | null): string {
-  return [normalizarTexto(nome), normalizarTexto(empresaNome), apenasDigitos(telefone)].join("|");
-}
-
-function normalizarCadastro(valor: unknown): string | null {
+function normalizarOperadoras(valor: unknown): string | null {
   const texto = limparEspacos(valor);
   return texto || null;
+}
+
+/**
+ * Chave natural de deduplicação do Smart Sync: nome em maiúsculas, sem
+ * acento, com espaços colapsados. Não há CPF/matrícula confiável na fonte
+ * oficial (ver nota V6.1 no topo do arquivo), então o nome é o único dado
+ * estável presente em 100% das linhas.
+ */
+export function calcularNomeNormalizado(nome: string): string {
+  return normalizarTexto(nome).toUpperCase();
+}
+
+/**
+ * Detecta e remove um número de documento (tipo CPF/RG, 8+ dígitos, com ou
+ * sem pontuação) colado junto ao nome de campos "EmpresaNome" preenchidos
+ * incorretamente com dados de pessoa física em vez de razão social.
+ * Retorna `{ valor, limpou }` — `limpou` indica se algo foi removido, para
+ * poder sinalizar um aviso na pré-visualização da importação.
+ */
+function limparEmpresaNome(valor: unknown): { valor: string | null; limpou: boolean } {
+  const bruto = limparEspacos(valor);
+  if (!bruto) return { valor: null, limpou: false };
+
+  const comNumeroNoFim = bruto.match(/^(.*?\D)\s+[\d.\-/]{8,}$/);
+  if (comNumeroNoFim) {
+    const nomeLimpo = limparEspacos(comNumeroNoFim[1]);
+    return { valor: nomeLimpo || null, limpou: true };
+  }
+
+  const comNumeroNoInicio = bruto.match(/^[\d.\-/]{6,}\s+(.+)$/);
+  if (comNumeroNoInicio) {
+    const nomeLimpo = limparEspacos(comNumeroNoInicio[1]);
+    return { valor: nomeLimpo || null, limpou: true };
+  }
+
+  return { valor: bruto, limpou: false };
 }
 
 function localizarCabecalho(
@@ -139,9 +176,9 @@ function localizarCabecalho(
         }
       }
     }
-    // Exige Nome + (Cadastro ou EmpresaNome) na mesma linha para considerar
-    // cabeçalho válido da tabela de colaboradores.
-    if (colunas.nome !== undefined && (colunas.cadastro !== undefined || colunas.empresaNome !== undefined)) {
+    // Exige Nome + (Operadoras/Cadastro ou EmpresaNome) na mesma linha para
+    // considerar cabeçalho válido da tabela de colaboradores.
+    if (colunas.nome !== undefined && (colunas.operadoras !== undefined || colunas.empresaNome !== undefined)) {
       return { linhaIndex: i, colunas };
     }
   }
@@ -195,33 +232,33 @@ export function analisarWorkbookColaboradores(buffer: Buffer, arquivoNome: strin
 
     const tipoPessoaRaw = colunas.tipoPessoa !== undefined ? linha[colunas.tipoPessoa] : null;
     const regionalRaw = colunas.regional !== undefined ? linha[colunas.regional] : null;
-    const cadastroRaw = colunas.cadastro !== undefined ? linha[colunas.cadastro] : null;
+    const operadorasRaw = colunas.operadoras !== undefined ? linha[colunas.operadoras] : null;
     const empresaNomeRaw = colunas.empresaNome !== undefined ? linha[colunas.empresaNome] : null;
     const cargoRaw = colunas.cargo !== undefined ? linha[colunas.cargo] : null;
     const telefoneRaw = colunas.telefone !== undefined ? linha[colunas.telefone] : null;
 
-    const cadastro = normalizarCadastro(cadastroRaw);
-    const empresaNome = limparEspacos(empresaNomeRaw) || null;
+    const operadoras = normalizarOperadoras(operadorasRaw);
+    const { valor: empresaNome, limpou: empresaNomeContinhaNumero } = limparEmpresaNome(empresaNomeRaw);
     const telefone = normalizarTelefone(telefoneRaw);
 
     const erros: string[] = [];
     const avisos: string[] = [];
 
-    if (!cadastro) {
-      avisos.push("Cadastro não informado — identificação usará Nome + Empresa + Telefone (menos confiável).");
-    }
     if (!regionalRaw) avisos.push("Regional não informada.");
     if (!empresaNome) avisos.push("Empresa não informada.");
     if (!cargoRaw) avisos.push("Cargo não informado.");
     if (!telefone) avisos.push("Telefone não informado.");
     if (!tipoPessoaRaw) avisos.push("TipoPessoa não informado.");
+    if (empresaNomeContinhaNumero) {
+      avisos.push("EmpresaNome continha um número de documento colado ao nome — removido automaticamente.");
+    }
 
     pessoas.push({
       linha: i + 1,
       nome: nomeTexto,
       tipoPessoa: normalizarTipoPessoa(tipoPessoaRaw),
       regional: limparEspacos(regionalRaw) || null,
-      cadastro,
+      operadoras,
       empresaNome,
       cargo: limparEspacos(cargoRaw) || null,
       telefone,
@@ -230,34 +267,23 @@ export function analisarWorkbookColaboradores(buffer: Buffer, arquivoNome: strin
     });
   }
 
-  // Duplicidade dentro do próprio arquivo: por Cadastro (quando informado) e,
-  // para quem não tem Cadastro, pela chave composta Nome+Empresa+Telefone.
-  const porCadastro = new Map<string, number[]>();
-  const porChaveComposta = new Map<string, number[]>();
+  // Duplicidade dentro do próprio arquivo: mesmo nome normalizado em mais de
+  // uma linha impede o Smart Sync de saber qual delas é a pessoa real —
+  // como não há mais chave de fallback (cadastro não é confiável), essas
+  // linhas ficam marcadas com erro e exigem correção manual na planilha.
+  const porNomeNormalizado = new Map<string, number[]>();
   pessoas.forEach((p, idx) => {
-    if (p.cadastro) {
-      const lista = porCadastro.get(p.cadastro) ?? [];
-      lista.push(idx);
-      porCadastro.set(p.cadastro, lista);
-    } else {
-      const chave = chaveComposta(p.nome, p.empresaNome, p.telefone);
-      const lista = porChaveComposta.get(chave) ?? [];
-      lista.push(idx);
-      porChaveComposta.set(chave, lista);
-    }
+    const chave = calcularNomeNormalizado(p.nome);
+    const lista = porNomeNormalizado.get(chave) ?? [];
+    lista.push(idx);
+    porNomeNormalizado.set(chave, lista);
   });
-  for (const indices of porCadastro.values()) {
-    if (indices.length > 1) {
-      const linhas = indices.map((idx) => pessoas[idx].linha).join(", ");
-      for (const idx of indices) pessoas[idx].erros.push(`Cadastro duplicado nesta planilha (linhas ${linhas}).`);
-    }
-  }
-  for (const indices of porChaveComposta.values()) {
+  for (const indices of porNomeNormalizado.values()) {
     if (indices.length > 1) {
       const linhas = indices.map((idx) => pessoas[idx].linha).join(", ");
       for (const idx of indices) {
         pessoas[idx].erros.push(
-          `Sem Cadastro, e Nome + Empresa + Telefone coincidem com outra linha desta planilha (linhas ${linhas}) — não é possível identificar com segurança.`
+          `Nome duplicado nesta planilha (linhas ${linhas}) — o Smart Sync identifica colaboradores pelo nome e não consegue diferenciar homônimos automaticamente. Ajuste o nome (ex.: adicione sobrenome completo) para diferenciar.`
         );
       }
     }
@@ -289,28 +315,29 @@ export function analisarWorkbookColaboradores(buffer: Buffer, arquivoNome: strin
 type ColaboradorExistente = {
   id: number;
   nome: string;
+  nomeNormalizado: string | null;
   tipoPessoa: string | null;
   regional: string | null;
-  cadastro: string | null;
+  operadoras: string | null;
   empresaNome: string | null;
   cargo: string | null;
   telefone: string | null;
   status: string;
 };
 
-/** Busca todo o Cadastro Mestre atual e monta os índices de busca (por cadastro e por chave composta). */
+/** Busca todo o Cadastro Mestre atual e monta o índice de busca por nome normalizado. */
 async function carregarIndices(): Promise<{
-  porCadastro: Map<string, ColaboradorExistente>;
-  porChaveComposta: Map<string, ColaboradorExistente>;
+  porNomeNormalizado: Map<string, ColaboradorExistente>;
   todos: ColaboradorExistente[];
 }> {
   const todos = await prisma.colaborador.findMany({
     select: {
       id: true,
       nome: true,
+      nomeNormalizado: true,
       tipoPessoa: true,
       regional: true,
-      cadastro: true,
+      operadoras: true,
       empresaNome: true,
       cargo: true,
       telefone: true,
@@ -318,26 +345,20 @@ async function carregarIndices(): Promise<{
     },
   });
 
-  const porCadastro = new Map<string, ColaboradorExistente>();
-  const porChaveComposta = new Map<string, ColaboradorExistente>();
+  const porNomeNormalizado = new Map<string, ColaboradorExistente>();
   for (const c of todos) {
-    if (c.cadastro) porCadastro.set(c.cadastro, c);
-    else porChaveComposta.set(chaveComposta(c.nome, c.empresaNome, c.telefone), c);
+    const chave = c.nomeNormalizado ?? calcularNomeNormalizado(c.nome);
+    porNomeNormalizado.set(chave, c);
   }
 
-  return { porCadastro, porChaveComposta, todos };
+  return { porNomeNormalizado, todos };
 }
 
 function encontrarExistente(
   p: ColaboradorImportado,
-  indices: { porCadastro: Map<string, ColaboradorExistente>; porChaveComposta: Map<string, ColaboradorExistente> }
+  indices: { porNomeNormalizado: Map<string, ColaboradorExistente> }
 ): ColaboradorExistente | null {
-  if (p.cadastro) {
-    const achado = indices.porCadastro.get(p.cadastro);
-    if (achado) return achado;
-  }
-  const achadoComposto = indices.porChaveComposta.get(chaveComposta(p.nome, p.empresaNome, p.telefone));
-  return achadoComposto ?? null;
+  return indices.porNomeNormalizado.get(calcularNomeNormalizado(p.nome)) ?? null;
 }
 
 function calcularDiferencas(existente: ColaboradorExistente, p: ColaboradorImportado): string[] {
@@ -345,6 +366,7 @@ function calcularDiferencas(existente: ColaboradorExistente, p: ColaboradorImpor
   if (existente.nome !== p.nome) diffs.push("nome");
   if ((existente.tipoPessoa ?? null) !== p.tipoPessoa) diffs.push("tipoPessoa");
   if ((existente.regional ?? null) !== p.regional) diffs.push("regional");
+  if ((existente.operadoras ?? null) !== p.operadoras) diffs.push("operadoras");
   if ((existente.empresaNome ?? null) !== p.empresaNome) diffs.push("empresaNome");
   if ((existente.cargo ?? null) !== p.cargo) diffs.push("cargo");
   if ((existente.telefone ?? null) !== p.telefone) diffs.push("telefone");
@@ -354,8 +376,8 @@ function calcularDiferencas(existente: ColaboradorExistente, p: ColaboradorImpor
 
 /**
  * Cruza os colaboradores extraídos da planilha com o Cadastro Mestre atual
- * (por Cadastro, com fallback por Nome+Empresa+Telefone) para marcar cada um
- * como "novo", "atualizacao" ou "sem_alteracao". Não grava nada no banco.
+ * (por nome normalizado) para marcar cada um como "novo", "atualizacao" ou
+ * "sem_alteracao". Não grava nada no banco.
  */
 export async function compararComBancoColaboradores(
   pessoas: ColaboradorImportado[]
@@ -407,22 +429,22 @@ export async function sincronizarColaboradores(pessoas: ColaboradorImportado[]):
           select: {
             id: true,
             nome: true,
+            nomeNormalizado: true,
             tipoPessoa: true,
             regional: true,
-            cadastro: true,
+            operadoras: true,
             empresaNome: true,
             cargo: true,
             telefone: true,
             status: true,
           },
         });
-        const porCadastro = new Map<string, ColaboradorExistente>();
-        const porChaveComposta = new Map<string, ColaboradorExistente>();
+        const porNomeNormalizado = new Map<string, ColaboradorExistente>();
         for (const c of todos) {
-          if (c.cadastro) porCadastro.set(c.cadastro, c);
-          else porChaveComposta.set(chaveComposta(c.nome, c.empresaNome, c.telefone), c);
+          const chave = c.nomeNormalizado ?? calcularNomeNormalizado(c.nome);
+          porNomeNormalizado.set(chave, c);
         }
-        return { porCadastro, porChaveComposta };
+        return { porNomeNormalizado };
       })();
 
       const idsMantidos = new Set<number>();
@@ -444,8 +466,10 @@ export async function sincronizarColaboradores(pessoas: ColaboradorImportado[]):
             where: { id: existente.id },
             data: {
               nome: p.nome,
+              nomeNormalizado: calcularNomeNormalizado(p.nome),
               tipoPessoa: p.tipoPessoa,
               regional: p.regional,
+              operadoras: p.operadoras,
               empresaNome: p.empresaNome,
               cargo: p.cargo,
               telefone: p.telefone,
@@ -470,9 +494,10 @@ export async function sincronizarColaboradores(pessoas: ColaboradorImportado[]):
         await tx.colaborador.createMany({
           data: novos.map((p) => ({
             nome: p.nome,
+            nomeNormalizado: calcularNomeNormalizado(p.nome),
             tipoPessoa: p.tipoPessoa,
             regional: p.regional,
-            cadastro: p.cadastro,
+            operadoras: p.operadoras,
             empresaNome: p.empresaNome,
             cargo: p.cargo,
             telefone: p.telefone,

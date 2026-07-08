@@ -19,10 +19,16 @@
 // por completo. O sistema passa a ter uma única entidade central de pessoas:
 // Colaborador (Cadastro Mestre), alimentada por sincronização em massa
 // (Smart Sync) a partir de um único arquivo Excel oficial. Não há mais
-// distinção entre líder/instalador nem agrupamento por equipe. Como CPF/RG
-// deixam de ser usados, a deduplicação passa a usar `cadastro` (matrícula,
-// chave natural estável) como chave primária de identificação, com fallback
-// por nome + empresa + telefone quando `cadastro` não está disponível.
+// distinção entre líder/instalador nem agrupamento por equipe.
+//
+// V6.1 — AJUSTE PÓS-ANÁLISE DA PLANILHA REAL: a coluna "Cadastro" do arquivo
+// oficial não é uma matrícula/ID único — na prática ela lista as operadoras/
+// clientes que o colaborador atende (ex.: "ERICSSON/NOKIA"), repete entre
+// colaboradores diferentes e frequentemente vem vazia. Por isso ela NÃO pode
+// ser chave de deduplicação e foi renomeada para `operadoras` (texto livre,
+// sem unicidade). A chave natural de identificação do Smart Sync passou a
+// ser `nomeNormalizado` (nome em maiúsculas, sem acento, espaços colapsados),
+// única e derivada automaticamente de `nome` a cada import/edição.
 //
 // SupportTicket passa a pertencer a um único colaborador (colaboradorId).
 // Os campos liderNomeHistorico/equipeNomeHistorico preservam, como texto
@@ -46,15 +52,25 @@ model Colaborador {
   id     Int    @id @default(autoincrement())
   nome   String
 
-  // "CLT", "PJ" ou outro classificador de vínculo — livre, vindo do Excel.
+  // Cópia normalizada de `nome` (maiúsculas, sem acento, espaços
+  // colapsados) — chave natural estável usada pelo Smart Sync para
+  // reconhecer "é o mesmo colaborador" entre importações, já que a
+  // planilha oficial não traz nenhum ID/matrícula confiável (ver nota V6.1
+  // no topo do arquivo). Calculada automaticamente a partir de `nome`,
+  // nunca preenchida manualmente. Nullable+unique por segurança do Prisma,
+  // mas sempre preenchida na prática (todo colaborador tem nome).
+  nomeNormalizado String? @unique
+
+  // "CLT", "PJ - EXTERNO", "PJ - INTERNO" ou outro classificador de vínculo
+  // — texto livre, vindo do Excel (não restringimos a um enum fixo porque
+  // novas categorias podem aparecer em importações futuras).
   tipoPessoa String?
   regional   String?
 
-  // Matrícula / código de cadastro — chave natural estável, usada como
-  // identificador primário de deduplicação no Smart Sync (não usamos CPF).
-  // Nullable+unique: permite múltiplos registros sem cadastro (ex: incluídos
-  // manualmente antes de terem matrícula formal) sem violar a constraint.
-  cadastro String? @unique
+  // Operadoras/clientes que o colaborador atende (ex.: "ERICSSON/NOKIA").
+  // Texto livre vindo da coluna "Cadastro" da planilha oficial — apesar do
+  // nome da coluna de origem, NÃO é um identificador único (ver nota V6.1).
+  operadoras String?
 
   empresaNome String?
   cargo       String?
