@@ -6,6 +6,7 @@ import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
 import { formatarTempo } from "@/lib/suporte";
 import { toggleColaboradorStatus } from "../actions";
+import { estaEmModoEdicao } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ function tempoDesde(dataIso: string): string {
 }
 
 export default async function ColaboradorDetalhePage({ params }: { params: { id: string } }) {
+  const podeEditar = estaEmModoEdicao();
   const id = Number(params.id);
   if (!id) notFound();
 
@@ -50,16 +52,22 @@ export default async function ColaboradorDetalhePage({ params }: { params: { id:
         description={[colaborador.cargo, colaborador.empresaNome].filter(Boolean).join(" · ") || "Colaborador"}
         action={
           <div className="flex items-center gap-3">
-            <form action={toggleColaboradorStatus}>
-              <input type="hidden" name="id" value={colaborador.id} />
-              <button
-                type="submit"
-                className={`badge cursor-pointer transition-opacity hover:opacity-75 ${colaborador.status === "ativo" ? "chip-success" : "chip-neutral"}`}
-                title={colaborador.status === "ativo" ? "Clique para marcar como inativo" : "Clique para marcar como ativo"}
-              >
+            {podeEditar ? (
+              <form action={toggleColaboradorStatus}>
+                <input type="hidden" name="id" value={colaborador.id} />
+                <button
+                  type="submit"
+                  className={`badge cursor-pointer transition-opacity hover:opacity-75 ${colaborador.status === "ativo" ? "chip-success" : "chip-neutral"}`}
+                  title={colaborador.status === "ativo" ? "Clique para marcar como inativo" : "Clique para marcar como ativo"}
+                >
+                  {colaborador.status}
+                </button>
+              </form>
+            ) : (
+              <span className={`badge ${colaborador.status === "ativo" ? "chip-success" : "chip-neutral"}`}>
                 {colaborador.status}
-              </button>
-            </form>
+              </span>
+            )}
             <Link href="/colaboradores" className="btn-secondary">
               Voltar para colaboradores
             </Link>

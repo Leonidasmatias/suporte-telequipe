@@ -2,10 +2,12 @@ import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { createTreinamento, deleteTreinamento } from "./actions";
+import { estaEmModoEdicao } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function TreinamentosPage() {
+  const podeEditar = estaEmModoEdicao();
   const treinamentosRaw = await prisma.treinamento.findMany({
     include: { colaboradores: true },
     orderBy: { createdAt: "desc" },
@@ -27,29 +29,35 @@ export default async function TreinamentosPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="card lg:col-span-1">
           <h2 className="mb-4 text-base font-semibold text-white">Novo treinamento</h2>
-          <form action={createTreinamento} className="space-y-4">
-            <div>
-              <label className="label-field">Nome</label>
-              <input name="nome" required className="input-field" placeholder="Ex: Certificação Nokia AirScale" />
-            </div>
-            <div>
-              <label className="label-field">Categoria</label>
-              <input name="categoria" className="input-field" placeholder="Ex: Certificação Nokia" />
-            </div>
-            <div>
-              <label className="label-field">Carga horária (h)</label>
-              <input name="carga_horaria" type="number" min={0} className="input-field" placeholder="0" />
-            </div>
-            <div>
-              <label className="label-field">Data de realização</label>
-              <input name="data_realizacao" type="date" className="input-field" />
-            </div>
-            <div>
-              <label className="label-field">Instrutor</label>
-              <input name="instrutor" className="input-field" placeholder="Nome do instrutor" />
-            </div>
-            <button type="submit" className="btn-primary w-full">Cadastrar treinamento</button>
-          </form>
+          {podeEditar ? (
+            <form action={createTreinamento} className="space-y-4">
+              <div>
+                <label className="label-field">Nome</label>
+                <input name="nome" required className="input-field" placeholder="Ex: Certificação Nokia AirScale" />
+              </div>
+              <div>
+                <label className="label-field">Categoria</label>
+                <input name="categoria" className="input-field" placeholder="Ex: Certificação Nokia" />
+              </div>
+              <div>
+                <label className="label-field">Carga horária (h)</label>
+                <input name="carga_horaria" type="number" min={0} className="input-field" placeholder="0" />
+              </div>
+              <div>
+                <label className="label-field">Data de realização</label>
+                <input name="data_realizacao" type="date" className="input-field" />
+              </div>
+              <div>
+                <label className="label-field">Instrutor</label>
+                <input name="instrutor" className="input-field" placeholder="Nome do instrutor" />
+              </div>
+              <button type="submit" className="btn-primary w-full">Cadastrar treinamento</button>
+            </form>
+          ) : (
+            <p className="rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 text-xs text-graphite-500">
+              Modo de visualização — destrave a edição na barra lateral para cadastrar.
+            </p>
+          )}
         </div>
 
         <div className="card lg:col-span-2">
@@ -68,7 +76,7 @@ export default async function TreinamentosPage() {
                     <th>Carga</th>
                     <th>Data</th>
                     <th>Participantes</th>
-                    <th></th>
+                    {podeEditar && <th></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -81,12 +89,14 @@ export default async function TreinamentosPage() {
                       <td>
                         <span className="badge chip-success">{t.participantes}</span>
                       </td>
-                      <td>
-                        <form action={deleteTreinamento}>
-                          <input type="hidden" name="id" value={t.id} />
-                          <button type="submit" className="btn-danger">Remover</button>
-                        </form>
-                      </td>
+                      {podeEditar && (
+                        <td>
+                          <form action={deleteTreinamento}>
+                            <input type="hidden" name="id" value={t.id} />
+                            <button type="submit" className="btn-danger">Remover</button>
+                          </form>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { calcularTempoAtendimento } from "@/lib/suporte";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { garantirModoEdicao } from "@/lib/auth";
 
 function campoTexto(formData: FormData, nome: string): string {
   return String(formData.get(nome) || "").trim();
@@ -20,6 +21,8 @@ function campoIdOpcional(formData: FormData, nome: string): number | null {
 }
 
 export async function createTicket(formData: FormData) {
+  garantirModoEdicao();
+
   const dataAtendimentoRaw = campoTexto(formData, "data_atendimento");
   const horaInicio = campoTexto(formData, "hora_inicio");
   const horaFim = campoOpcional(formData, "hora_fim");
@@ -69,6 +72,8 @@ export async function createTicket(formData: FormData) {
 }
 
 export async function updateTicket(formData: FormData) {
+  garantirModoEdicao();
+
   const id = Number(formData.get("id"));
   if (!id) return;
 
@@ -122,6 +127,8 @@ export async function updateTicket(formData: FormData) {
 
 /** Encerra rapidamente um atendimento (usado pelo botão "Encerrar atendimento" na tela de detalhes). */
 export async function closeTicket(formData: FormData) {
+  garantirModoEdicao();
+
   const id = Number(formData.get("id"));
   if (!id) return;
 
@@ -137,6 +144,8 @@ export async function closeTicket(formData: FormData) {
 }
 
 export async function deleteTicket(formData: FormData) {
+  garantirModoEdicao();
+
   const id = Number(formData.get("id"));
   if (!id) return;
 

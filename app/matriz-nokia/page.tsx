@@ -5,6 +5,7 @@ import StatCard from "@/components/StatCard";
 import ScoreBar from "@/components/ScoreBar";
 import { createAvaliacao, deleteAvaliacao } from "./actions";
 import { ETAPAS, NOME_ETAPA, buildColaboradorInsights, type EtapaCodigo } from "@/lib/imt";
+import { estaEmModoEdicao } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ function nivelBadgeClass(nivel: string) {
 }
 
 export default async function MatrizNokiaPage() {
+  const podeEditar = estaEmModoEdicao();
   const avaliacoesRaw = await prisma.avaliacaoCompetencia.findMany({
     include: { colaborador: true, competencia: true },
     orderBy: { createdAt: "desc" },
@@ -67,43 +69,49 @@ export default async function MatrizNokiaPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="card lg:col-span-1">
           <h2 className="mb-4 text-base font-semibold text-white">Nova avaliação</h2>
-          <form action={createAvaliacao} className="space-y-4">
-            <div>
-              <label className="label-field">Colaborador</label>
-              <select name="colaborador_id" required className="input-field">
-                <option value="">Selecione</option>
-                {colaboradores.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nome}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label-field">Etapa Nokia</label>
-              <select name="etapa" required className="input-field" defaultValue="">
-                <option value="" disabled>Selecione a etapa</option>
-                {ETAPAS.map((e) => (
-                  <option key={e.codigo} value={e.codigo}>{e.nome}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label-field">Nível</label>
-              <select name="nivel" className="input-field" defaultValue="Básico">
-                {niveis.map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label-field">IMT Score (0-100)</label>
-              <input name="imt_score" type="number" min={0} max={100} className="input-field" placeholder="0" />
-            </div>
-            <div>
-              <label className="label-field">Data da avaliação</label>
-              <input name="data_avaliacao" type="date" className="input-field" />
-            </div>
-            <button type="submit" className="btn-primary w-full">Registrar avaliação</button>
-          </form>
+          {podeEditar ? (
+            <form action={createAvaliacao} className="space-y-4">
+              <div>
+                <label className="label-field">Colaborador</label>
+                <select name="colaborador_id" required className="input-field">
+                  <option value="">Selecione</option>
+                  {colaboradores.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label-field">Etapa Nokia</label>
+                <select name="etapa" required className="input-field" defaultValue="">
+                  <option value="" disabled>Selecione a etapa</option>
+                  {ETAPAS.map((e) => (
+                    <option key={e.codigo} value={e.codigo}>{e.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label-field">Nível</label>
+                <select name="nivel" className="input-field" defaultValue="Básico">
+                  {niveis.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label-field">IMT Score (0-100)</label>
+                <input name="imt_score" type="number" min={0} max={100} className="input-field" placeholder="0" />
+              </div>
+              <div>
+                <label className="label-field">Data da avaliação</label>
+                <input name="data_avaliacao" type="date" className="input-field" />
+              </div>
+              <button type="submit" className="btn-primary w-full">Registrar avaliação</button>
+            </form>
+          ) : (
+            <p className="rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 text-xs text-graphite-500">
+              Modo de visualização — destrave a edição na barra lateral para registrar.
+            </p>
+          )}
         </div>
 
         <div className="card lg:col-span-2">
@@ -119,7 +127,7 @@ export default async function MatrizNokiaPage() {
                     <th>Etapa</th>
                     <th>Nível</th>
                     <th>IMT</th>
-                    <th></th>
+                    {podeEditar && <th></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -131,12 +139,14 @@ export default async function MatrizNokiaPage() {
                         <span className={`badge ${nivelBadgeClass(a.nivel)}`}>{a.nivel}</span>
                       </td>
                       <td className="tabular-nums">{a.imtScore}%</td>
-                      <td>
-                        <form action={deleteAvaliacao}>
-                          <input type="hidden" name="id" value={a.id} />
-                          <button type="submit" className="btn-danger">Remover</button>
-                        </form>
-                      </td>
+                      {podeEditar && (
+                        <td>
+                          <form action={deleteAvaliacao}>
+                            <input type="hidden" name="id" value={a.id} />
+                            <button type="submit" className="btn-danger">Remover</button>
+                          </form>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

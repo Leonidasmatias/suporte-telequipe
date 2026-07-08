@@ -34,6 +34,16 @@ Após inspecionar o arquivo oficial `BASE_COLABORADORES_INICIAL_2026.xlsx`, dois
 - Em parte das linhas, `EmpresaNome` vinha preenchido com "nome da pessoa + número de documento (tipo CPF)" em vez do nome da empresa — típico de colaboradores autônomos sem empresa formal. `lib/colaboradores.ts` detecta esse padrão e remove o número automaticamente (nunca é gravado no banco).
 - Migration `20260707020000_operadoras_e_nome_normalizado`: renomeia a coluna, remove a unicidade antiga e cria `nomeNormalizado` com backfill.
 
+### V6.2 — Controle de acesso (edição x visualização)
+
+Qualquer pessoa com o link visualiza o sistema livremente, sem login. Ações de escrita (criar, editar, excluir, alternar status, importar) exigem que o **modo de edição** esteja destravado — feito na barra lateral, informando a senha em `EDIT_PASSWORD`.
+
+- **`lib/auth.ts`**: `senhaCorreta()` compara com `EDIT_PASSWORD` (comparação em tempo constante); `criarTokenSessao()`/`estaEmModoEdicao()` geram/validam um cookie httpOnly assinado com HMAC-SHA256 (`AUTH_SECRET`), válido por 30 dias; `garantirModoEdicao()` lança erro se chamado sem o modo de edição ativo.
+- **`app/auth/actions.ts`**: `desbloquearEdicao` (valida a senha e grava o cookie) e `bloquearEdicao` (remove o cookie).
+- **`components/EditModeControl.tsx`**: widget na barra lateral — mostra "Modo de edição ativo" com botão "Bloquear", ou um campo de senha para destravar.
+- Toda Server Action que escreve no banco chama `garantirModoEdicao()` como primeira linha (defesa em profundidade, independente da UI). Cada página esconde os formulários/botões de criar, editar e excluir quando o modo de edição não está ativo (`estaEmModoEdicao()` lido diretamente nos Server Components).
+- Variáveis obrigatórias em produção: `EDIT_PASSWORD` (a senha) e `AUTH_SECRET` (string aleatória para assinar o cookie — gere com `openssl rand -hex 32`). Sem elas, o modo de edição não pode ser destravado.
+
 ## O que mudou na V3
 
 ## O que mudou na V3

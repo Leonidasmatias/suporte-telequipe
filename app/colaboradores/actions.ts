@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { garantirModoEdicao } from "@/lib/auth";
 import {
   analisarWorkbookColaboradores,
   calcularNomeNormalizado,
@@ -77,6 +78,12 @@ export type ConfirmarSincronizacaoResultado =
 
 /** Executa o Smart Sync: grava no Cadastro Mestre (insere/atualiza/inativa) e retorna o relatório final. */
 export async function confirmarSincronizacao(pessoas: ColaboradorImportado[]): Promise<ConfirmarSincronizacaoResultado> {
+  try {
+    garantirModoEdicao();
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : "Ação bloqueada." };
+  }
+
   if (!pessoas || pessoas.length === 0) {
     return { ok: false, erro: "Nenhum colaborador para sincronizar." };
   }
@@ -99,6 +106,8 @@ export async function confirmarSincronizacao(pessoas: ColaboradorImportado[]): P
 // ---------------------------------------------------------------
 
 export async function createColaborador(formData: FormData) {
+  garantirModoEdicao();
+
   const nome = String(formData.get("nome") || "").trim();
   const tipoPessoa = String(formData.get("tipo_pessoa") || "").trim();
   const regional = String(formData.get("regional") || "").trim();
@@ -140,6 +149,8 @@ export async function createColaborador(formData: FormData) {
 }
 
 export async function updateColaborador(formData: FormData) {
+  garantirModoEdicao();
+
   const id = Number(formData.get("id"));
   if (!id) return;
 
@@ -180,6 +191,8 @@ export async function updateColaborador(formData: FormData) {
 
 /** Alterna o status do colaborador entre "ativo" e "inativo" em um clique, sem precisar abrir um formulário de edição. */
 export async function toggleColaboradorStatus(formData: FormData) {
+  garantirModoEdicao();
+
   const id = Number(formData.get("id"));
   if (!id) return;
 
@@ -200,6 +213,8 @@ export async function toggleColaboradorStatus(formData: FormData) {
 }
 
 export async function deleteColaborador(formData: FormData) {
+  garantirModoEdicao();
+
   const id = Number(formData.get("id"));
   if (!id) return;
   await prisma.colaborador.delete({ where: { id } });

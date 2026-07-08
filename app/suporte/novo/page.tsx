@@ -1,12 +1,24 @@
 import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import TempoAtendimentoInputs from "@/components/TempoAtendimentoInputs";
+import SomenteLeituraNotice from "@/components/SomenteLeituraNotice";
 import { createTicket } from "../actions";
 import { TIPOS_ATENDIMENTO, CATEGORIAS_SUPORTE, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
+import { estaEmModoEdicao } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function NovoAtendimentoPage() {
+  const podeEditar = estaEmModoEdicao();
+  if (!podeEditar) {
+    return (
+      <div>
+        <PageHeader title="Novo atendimento" description="Registrar um atendimento técnico prestado a um colaborador de campo." />
+        <SomenteLeituraNotice mensagem="Modo de visualização — destrave a edição na barra lateral para registrar um atendimento." />
+      </div>
+    );
+  }
+
   const colaboradores = await prisma.colaborador.findMany({
     where: { status: "ativo" },
     orderBy: { nome: "asc" },

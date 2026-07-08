@@ -12,10 +12,12 @@ import {
   NOME_ETAPA,
   LIMIAR_ALERTA,
 } from "@/lib/imt";
+import { estaEmModoEdicao } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function InsightsOperacionaisPage() {
+  const podeEditar = estaEmModoEdicao();
   const colaboradores = await buildColaboradorInsights();
   const alertas = buildAlertas(colaboradores);
   const sugestoes = buildSugestoesTreinamento(colaboradores);
@@ -158,7 +160,7 @@ export default async function InsightsOperacionaisPage() {
                   <th>Etapa com falha</th>
                   <th>IMT</th>
                   <th>Treinamento sugerido</th>
-                  <th></th>
+                  {podeEditar && <th></th>}
                 </tr>
               </thead>
               <tbody>
@@ -168,13 +170,15 @@ export default async function InsightsOperacionaisPage() {
                     <td>{s.etapaNome}</td>
                     <td className="tabular-nums">{Math.round(s.media)}%</td>
                     <td>{s.treinamentoSugerido}</td>
-                    <td>
-                      <form action={criarTreinamentoSugerido}>
-                        <input type="hidden" name="colaborador_id" value={s.colaborador_id} />
-                        <input type="hidden" name="etapa" value={s.etapa} />
-                        <button type="submit" className="btn-secondary">Criar treinamento</button>
-                      </form>
-                    </td>
+                    {podeEditar && (
+                      <td>
+                        <form action={criarTreinamentoSugerido}>
+                          <input type="hidden" name="colaborador_id" value={s.colaborador_id} />
+                          <input type="hidden" name="etapa" value={s.etapa} />
+                          <button type="submit" className="btn-secondary">Criar treinamento</button>
+                        </form>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

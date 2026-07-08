@@ -13,6 +13,7 @@ import {
   STATUS_SUPORTE,
   type FiltrosSuporte,
 } from "@/lib/suporte";
+import { estaEmModoEdicao } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ const badgeResultado: Record<string, string> = {
 };
 
 export default async function SuportePage({ searchParams }: { searchParams: SearchParams }) {
+  const podeEditar = estaEmModoEdicao();
   const filtros: FiltrosSuporte = {
     dataInicio: primeiro(searchParams.data_inicio) || undefined,
     dataFim: primeiro(searchParams.data_fim) || undefined,
@@ -80,9 +82,11 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
         title="Suporte Técnico"
         description="Central de atendimento técnico aos colaboradores de campo — banco de conhecimento operacional."
         action={
-          <Link href="/suporte/novo" className="btn-primary">
-            Novo atendimento
-          </Link>
+          podeEditar ? (
+            <Link href="/suporte/novo" className="btn-primary">
+              Novo atendimento
+            </Link>
+          ) : undefined
         }
       />
 

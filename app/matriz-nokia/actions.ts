@@ -3,10 +3,13 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { ETAPAS } from "@/lib/imt";
+import { garantirModoEdicao } from "@/lib/auth";
 
 const CODIGOS_VALIDOS = new Set<string>(ETAPAS.map((e) => e.codigo));
 
 export async function createAvaliacao(formData: FormData) {
+  garantirModoEdicao();
+
   const colaboradorId = Number(formData.get("colaborador_id"));
   const etapa = String(formData.get("etapa") || "");
   const nivel = String(formData.get("nivel") || "Não certificado");
@@ -39,6 +42,8 @@ export async function createAvaliacao(formData: FormData) {
 }
 
 export async function deleteAvaliacao(formData: FormData) {
+  garantirModoEdicao();
+
   const id = Number(formData.get("id"));
   if (!id) return;
   await prisma.avaliacaoCompetencia.delete({ where: { id } });

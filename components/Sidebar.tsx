@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import EditModeControl from "./EditModeControl";
 
 type NavItem = {
   href: string;
@@ -19,7 +20,7 @@ const navItems: NavItem[] = [
   { href: "/importacao", label: "Importação Massiva", icon: "M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ podeEditar }: { podeEditar: boolean }) {
   const pathname = usePathname();
 
   return (
@@ -109,6 +110,8 @@ export default function Sidebar() {
             leonidasmatias81@gmail.com
           </a>
         </div>
+
+        <EditModeControl podeEditar={podeEditar} />
       </div>
     </aside>
   );

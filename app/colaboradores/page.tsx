@@ -7,6 +7,7 @@ import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
 import FiltrosColaboradores from "./FiltrosColaboradores";
 import { createColaborador, deleteColaborador, toggleColaboradorStatus } from "./actions";
+import { estaEmModoEdicao } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ function ehCampoOrdenavel(valor: string): valor is CampoOrdenavel {
 }
 
 export default async function ColaboradoresPage({ searchParams }: { searchParams: SearchParams }) {
+  const podeEditar = estaEmModoEdicao();
   const q = primeiro(searchParams.q);
   const tipoPessoa = primeiro(searchParams.tipoPessoa);
   const regional = primeiro(searchParams.regional);
@@ -186,44 +188,50 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
           <p className="mb-4 text-xs text-graphite-500">
             Cadastro manual pontual. A forma oficial de manter o Cadastro Mestre atualizado é a Importação Massiva.
           </p>
-          <form action={createColaborador} className="space-y-4">
-            <div>
-              <label className="label-field">Nome</label>
-              <input name="nome" required className="input-field" placeholder="Nome completo" />
-            </div>
-            <div>
-              <label className="label-field">TipoPessoa</label>
-              <input name="tipo_pessoa" className="input-field" placeholder="Ex: CLT, PJ" />
-            </div>
-            <div>
-              <label className="label-field">Regional</label>
-              <input name="regional" className="input-field" placeholder="Ex: Regional Sul" />
-            </div>
-            <div>
-              <label className="label-field">Operadoras/Clientes</label>
-              <input name="operadoras" className="input-field" placeholder="Ex: ERICSSON/NOKIA" />
-            </div>
-            <div>
-              <label className="label-field">Empresa</label>
-              <input name="empresa_nome" className="input-field" placeholder="Nome da empresa" />
-            </div>
-            <div>
-              <label className="label-field">Cargo</label>
-              <input name="cargo" className="input-field" placeholder="Ex: Instalador Senior I" />
-            </div>
-            <div>
-              <label className="label-field">Telefone</label>
-              <input name="telefone" className="input-field" placeholder="(00) 00000-0000" />
-            </div>
-            <div>
-              <label className="label-field">Status</label>
-              <select name="status" className="input-field" defaultValue="ativo">
-                <option value="ativo">Ativo</option>
-                <option value="inativo">Inativo</option>
-              </select>
-            </div>
-            <button type="submit" className="btn-primary w-full">Cadastrar colaborador</button>
-          </form>
+          {podeEditar ? (
+            <form action={createColaborador} className="space-y-4">
+              <div>
+                <label className="label-field">Nome</label>
+                <input name="nome" required className="input-field" placeholder="Nome completo" />
+              </div>
+              <div>
+                <label className="label-field">TipoPessoa</label>
+                <input name="tipo_pessoa" className="input-field" placeholder="Ex: CLT, PJ" />
+              </div>
+              <div>
+                <label className="label-field">Regional</label>
+                <input name="regional" className="input-field" placeholder="Ex: Regional Sul" />
+              </div>
+              <div>
+                <label className="label-field">Operadoras/Clientes</label>
+                <input name="operadoras" className="input-field" placeholder="Ex: ERICSSON/NOKIA" />
+              </div>
+              <div>
+                <label className="label-field">Empresa</label>
+                <input name="empresa_nome" className="input-field" placeholder="Nome da empresa" />
+              </div>
+              <div>
+                <label className="label-field">Cargo</label>
+                <input name="cargo" className="input-field" placeholder="Ex: Instalador Senior I" />
+              </div>
+              <div>
+                <label className="label-field">Telefone</label>
+                <input name="telefone" className="input-field" placeholder="(00) 00000-0000" />
+              </div>
+              <div>
+                <label className="label-field">Status</label>
+                <select name="status" className="input-field" defaultValue="ativo">
+                  <option value="ativo">Ativo</option>
+                  <option value="inativo">Inativo</option>
+                </select>
+              </div>
+              <button type="submit" className="btn-primary w-full">Cadastrar colaborador</button>
+            </form>
+          ) : (
+            <p className="rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 text-xs text-graphite-500">
+              Modo de visualização — destrave a edição na barra lateral para cadastrar.
+            </p>
+          )}
         </div>
 
         <div className="card lg:col-span-2">
@@ -260,24 +268,30 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
                         <td className="text-xs">{c.operadoras || "—"}</td>
                         <td>{c.telefone || "—"}</td>
                         <td>
-                          <form action={toggleColaboradorStatus}>
-                            <input type="hidden" name="id" value={c.id} />
-                            <button
-                              type="submit"
-                              className={`badge cursor-pointer transition-opacity hover:opacity-75 ${c.status === "ativo" ? "chip-success" : "chip-neutral"}`}
-                              title={c.status === "ativo" ? "Clique para marcar como inativo" : "Clique para marcar como ativo"}
-                            >
-                              {c.status}
-                            </button>
-                          </form>
+                          {podeEditar ? (
+                            <form action={toggleColaboradorStatus}>
+                              <input type="hidden" name="id" value={c.id} />
+                              <button
+                                type="submit"
+                                className={`badge cursor-pointer transition-opacity hover:opacity-75 ${c.status === "ativo" ? "chip-success" : "chip-neutral"}`}
+                                title={c.status === "ativo" ? "Clique para marcar como inativo" : "Clique para marcar como ativo"}
+                              >
+                                {c.status}
+                              </button>
+                            </form>
+                          ) : (
+                            <span className={`badge ${c.status === "ativo" ? "chip-success" : "chip-neutral"}`}>{c.status}</span>
+                          )}
                         </td>
                         <td>
                           <div className="flex gap-2">
                             <Link href={`/colaboradores/${c.id}`} className="btn-secondary">Ver histórico</Link>
-                            <form action={deleteColaborador}>
-                              <input type="hidden" name="id" value={c.id} />
-                              <button type="submit" className="btn-danger">Remover</button>
-                            </form>
+                            {podeEditar && (
+                              <form action={deleteColaborador}>
+                                <input type="hidden" name="id" value={c.id} />
+                                <button type="submit" className="btn-danger">Remover</button>
+                              </form>
+                            )}
                           </div>
                         </td>
                       </tr>

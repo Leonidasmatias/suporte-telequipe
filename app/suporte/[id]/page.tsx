@@ -4,6 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import TempoAtendimentoInputs from "@/components/TempoAtendimentoInputs";
 import { updateTicket, closeTicket, deleteTicket } from "../actions";
 import { TIPOS_ATENDIMENTO, CATEGORIAS_SUPORTE, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
+import { estaEmModoEdicao } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ const badgeStatus: Record<string, string> = {
 };
 
 export default async function DetalheAtendimentoPage({ params }: { params: { id: string } }) {
+  const podeEditar = estaEmModoEdicao();
   const id = Number(params.id);
   if (!id) notFound();
 
@@ -55,9 +57,9 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
         </div>
       )}
 
-      <form action={updateTicket} className="card space-y-6">
+      <form action={updateTicket} className="card">
         <input type="hidden" name="id" value={ticket.id} />
-
+        <fieldset disabled={!podeEditar} className="space-y-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className="label-field">Data</label>
@@ -173,20 +175,23 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
         <div className="flex justify-end border-t border-graphite-800 pt-4">
           <button type="submit" className="btn-primary">Salvar alterações</button>
         </div>
+        </fieldset>
       </form>
 
-      <div className="mt-4 flex justify-end gap-3">
-        <form action={closeTicket}>
-          <input type="hidden" name="id" value={ticket.id} />
-          <button type="submit" className="btn-secondary" disabled={ticket.status === "Finalizado"}>
-            Encerrar atendimento
-          </button>
-        </form>
-        <form action={deleteTicket}>
-          <input type="hidden" name="id" value={ticket.id} />
-          <button type="submit" className="btn-danger">Excluir</button>
-        </form>
-      </div>
+      {podeEditar && (
+        <div className="mt-4 flex justify-end gap-3">
+          <form action={closeTicket}>
+            <input type="hidden" name="id" value={ticket.id} />
+            <button type="submit" className="btn-secondary" disabled={ticket.status === "Finalizado"}>
+              Encerrar atendimento
+            </button>
+          </form>
+          <form action={deleteTicket}>
+            <input type="hidden" name="id" value={ticket.id} />
+            <button type="submit" className="btn-danger">Excluir</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
