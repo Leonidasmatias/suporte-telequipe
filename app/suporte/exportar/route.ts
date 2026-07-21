@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { buildWhereSuporte } from "@/lib/suporte";
+import { RECURSOS, verificarAcessoApi } from "@/lib/autorizacao";
 import {
   validarFiltrosExportacao,
   montarNomeArquivo,
@@ -14,9 +15,12 @@ import {
  *
  * Exportação em Excel (.xlsx) dos atendimentos da tela "Suporte Técnico",
  * respeitando exatamente os filtros atualmente aplicados na tela (mesma
- * query string). É uma operação de leitura — mesma política de acesso da
- * própria listagem /suporte (visualização livre; só escrita exige o "modo de
- * edição" — ver `lib/auth.ts`), então não exige `garantirModoEdicao()`.
+ * query string).
+ *
+ * Etapa 3: única rota de API do sistema — protegida com o mesmo padrão
+ * 401 (não autenticado) / 403 (autenticado sem permissão) usado em toda a
+ * aplicação (ver lib/autorizacao.ts, verificarAcessoApi). Checagem
+ * independente da UI: funciona mesmo que alguém chame a URL diretamente.
  *
  * Os filtros nunca são confiados como vieram do frontend: são revalidados e
  * saneados aqui (`validarFiltrosExportacao`) antes de qualquer consulta —
@@ -27,6 +31,11 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const acessoNegado = await verificarAcessoApi(RECURSOS.exportacoes);
+    if (acessoNegado) {
+      return NextResponse.json(acessoNegado.body, { status: acessoNegado.status });
+    }
+
     const { filtros, erros } = validarFiltrosExportacao(request.nextUrl.searchParams);
     if (erros.length > 0) {
       return NextResponse.json({ ok: false, error: erros.join(" ") }, { status: 400 });

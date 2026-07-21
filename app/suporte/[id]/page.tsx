@@ -4,7 +4,7 @@ import PageHeader from "@/components/PageHeader";
 import TempoAtendimentoInputs from "@/components/TempoAtendimentoInputs";
 import { updateTicket, closeTicket, deleteTicket } from "../actions";
 import { TIPOS_ATENDIMENTO, CATEGORIAS_SUPORTE, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
-import { estaEmModoEdicao } from "@/lib/auth";
+import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,10 @@ const badgeStatus: Record<string, string> = {
 };
 
 export default async function DetalheAtendimentoPage({ params }: { params: { id: string } }) {
-  const podeEditar = estaEmModoEdicao();
+  const usuario = await requireAccess(RECURSOS.atendimentos);
+  const podeEditar = canPerform(usuario, ACOES["atendimentos.editar"]);
+  const podeEncerrar = canPerform(usuario, ACOES["atendimentos.encerrar"]);
+  const podeExcluir = canPerform(usuario, ACOES["atendimentos.excluir"]);
   const id = Number(params.id);
   if (!id) notFound();
 
@@ -178,18 +181,23 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
         </fieldset>
       </form>
 
-      {podeEditar && (
+      {(podeEncerrar || podeExcluir) && (
         <div className="mt-4 flex justify-end gap-3">
-          <form action={closeTicket}>
-            <input type="hidden" name="id" value={ticket.id} />
-            <button type="submit" className="btn-secondary" disabled={ticket.status === "Finalizado"}>
-              Encerrar atendimento
-            </button>
-          </form>
-          <form action={deleteTicket}>
-            <input type="hidden" name="id" value={ticket.id} />
-            <button type="submit" className="btn-danger">Excluir</button>
-          </form>
+          {podeEncerrar && (
+            <form action={closeTicket}>
+              <input type="hidden" name="id" value={ticket.id} />
+              <button type="submit" className="btn-secondary" disabled={ticket.status === "Finalizado"}>
+                Encerrar atendimento
+              </button>
+            </form>
+          )}
+          {/* Exclusão é uma ação administrativa sensível — só ADMIN (ver lib/autorizacao.ts). */}
+          {podeExcluir && (
+            <form action={deleteTicket}>
+              <input type="hidden" name="id" value={ticket.id} />
+              <button type="submit" className="btn-danger">Excluir</button>
+            </form>
+          )}
         </div>
       )}
     </div>

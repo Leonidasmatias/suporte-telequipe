@@ -1,12 +1,14 @@
 import PageHeader from "@/components/PageHeader";
-import SomenteLeituraNotice from "@/components/SomenteLeituraNotice";
 import ImportadorColaboradores from "./ImportadorColaboradores";
-import { estaEmModoEdicao } from "@/lib/auth";
+import { requireAdmin } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
-export default function ImportacaoPage() {
-  const podeEditar = estaEmModoEdicao();
+// Página admin-only: Smart Sync reestrutura o Cadastro Mestre de
+// Colaboradores em massa (operação sensível, não listada no acesso do
+// TECNICO na especificação da Etapa 3 — ver lib/autorizacao.ts).
+export default async function ImportacaoPage() {
+  await requireAdmin();
 
   return (
     <div>
@@ -14,11 +16,7 @@ export default function ImportacaoPage() {
         title="Importação Massiva de Colaboradores"
         description="Envie o arquivo Excel oficial e o sistema sincroniza automaticamente o Cadastro Mestre (Smart Sync): insere novos, atualiza existentes e inativa quem não aparece mais na planilha."
       />
-      {podeEditar ? (
-        <ImportadorColaboradores />
-      ) : (
-        <SomenteLeituraNotice mensagem="Modo de visualização — destrave a edição na barra lateral para importar planilhas." />
-      )}
+      <ImportadorColaboradores />
     </div>
   );
 }

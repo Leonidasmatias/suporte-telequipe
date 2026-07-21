@@ -37,6 +37,17 @@
 // começar o Cadastro Mestre do zero (sem migrar líderes/equipes antigos para
 // Colaborador), então esses atendimentos legados não podem apontar para um
 // colaboradorId válido, mas o texto fica preservado para consulta histórica.
+//
+// V7 — ETAPA 1/2/3 (AUTENTICAÇÃO, GESTÃO DE USUÁRIOS, PERMISSÕES): adicionado
+// o model Usuario (conta individual, com e-mail/senha e perfil ADMIN ou
+// TECNICO) e o enum PerfilUsuario. Substitui o antigo modelo de "modo de
+// edição" por senha única compartilhada (cookie `edicao_sessao`, ver commit
+// "Controle de acesso: modo de edicao com senha, visualizacao livre") por
+// autenticação real por usuário — ver lib/auth.ts e lib/autorizacao.ts.
+// Único usuário próprio do sistema (não confundir com Colaborador, que é o
+// Cadastro Mestre de pessoal de campo — um Usuario pode ou não corresponder
+// a um Colaborador; são entidades independentes por decisão explícita, para
+// não acoplar login/permissão a dados operacionais de RH).
 
 generator client {
   provider      = "prisma-client-js"
@@ -46,6 +57,32 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum PerfilUsuario {
+  ADMIN
+  TECNICO
+}
+
+/// Conta de acesso ao sistema (login). Independente do Cadastro Mestre de
+/// Colaboradores — ver nota V7 no topo do arquivo.
+model Usuario {
+  id     Int    @id @default(autoincrement())
+  nome   String
+  email  String @unique
+
+  /// Hash scrypt (salt + hash em hex, formato "salt:hash") — nunca a senha em texto puro. Ver lib/senha.ts.
+  senhaHash String
+
+  perfil PerfilUsuario
+
+  /// Usuário inativado perde acesso imediatamente (toda verificação relê este campo do banco a cada requisição — ver lib/auth.ts).
+  ativo Boolean @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("usuarios")
 }
 
 model Colaborador {

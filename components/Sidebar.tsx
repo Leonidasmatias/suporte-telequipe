@@ -2,26 +2,21 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import EditModeControl from "./EditModeControl";
+import UserMenu from "./UserMenu";
+import { canAccess } from "@/lib/permissoes";
+import { navItems } from "@/lib/navegacao";
+import type { UsuarioSessao } from "@/lib/auth";
 
-type NavItem = {
-  href: string;
-  label: string;
-  icon: string;
-};
+// Etapa 3: cada item de lib/navegacao.ts carrega o `recurso` correspondente
+// na matriz de permissões (lib/permissoes.ts) — o menu só mostra o que o
+// perfil logado pode acessar. Isto é só a camada 1 (interface); as páginas
+// e o backend se protegem de forma independente mesmo que este filtro seja
+// contornado. A lista em si vive em lib/navegacao.ts (sem "use client")
+// para que tests/menu.test.ts possa importá-la sem precisar de DOM/jsdom.
 
-const navItems: NavItem[] = [
-  { href: "/home", label: "Dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
-  { href: "/colaboradores", label: "Colaboradores", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
-  { href: "/matriz-nokia", label: "Matriz Nokia", icon: "M9 3v18M15 3v18M3 9h18M3 15h18" },
-  { href: "/treinamentos", label: "Treinamentos", icon: "M12 14l9-5-9-5-9 5 9 5zm0 0v7m-9-5v3a9 3 0 0018 0v-3" },
-  { href: "/insights-operacionais", label: "Insights Operacionais", icon: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" },
-  { href: "/suporte", label: "Suporte Técnico", icon: "M3 5a2 2 0 012-2h2.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" },
-  { href: "/importacao", label: "Importação Massiva", icon: "M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5m0 0l5 5m-5-5v12" },
-];
-
-export default function Sidebar({ podeEditar }: { podeEditar: boolean }) {
+export default function Sidebar({ usuario }: { usuario: UsuarioSessao }) {
   const pathname = usePathname();
+  const itensVisiveis = navItems.filter((item) => canAccess(usuario, item.recurso));
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-graphite-800 bg-graphite-900/95 backdrop-blur">
@@ -36,7 +31,7 @@ export default function Sidebar({ podeEditar }: { podeEditar: boolean }) {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-        {navItems.map((item) => {
+        {itensVisiveis.map((item) => {
           const active = pathname === item.href || pathname?.startsWith(item.href + "/");
           return (
             <Link
@@ -79,9 +74,6 @@ export default function Sidebar({ podeEditar }: { podeEditar: boolean }) {
           <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-graphite-700">
             Indicadores
           </div>
-          <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-graphite-700">
-            Relatórios
-          </div>
         </div>
       </nav>
 
@@ -111,7 +103,7 @@ export default function Sidebar({ podeEditar }: { podeEditar: boolean }) {
           </a>
         </div>
 
-        <EditModeControl podeEditar={podeEditar} />
+        <UserMenu usuario={usuario} />
       </div>
     </aside>
   );

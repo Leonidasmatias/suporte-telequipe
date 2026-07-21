@@ -1,21 +1,41 @@
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import { prisma } from "@/lib/prisma";
 
 /**
- * Controle de acesso simples do sistema: visualização é livre para qualquer
- * pessoa com o link, mas ações de escrita (criar, editar, excluir, alternar
- * status, confirmar sincronização etc.) exigem que o "modo de edição" esteja
- * destravado — o que só acontece informando a senha em EDIT_PASSWORD.
+ * Autenticação por usuário (Etapa 1). Substitui o antigo "modo de edição"
+ * por senha única compartilhada para todo mundo (ver commit "Controle de
+ * acesso: modo de edicao com senha, visualizacao livre") por contas
+ * individuais com e-mail/senha e perfil — model Usuario em schema.prisma.
  *
- * O desbloqueio é guardado em um cookie httpOnly assinado com AUTH_SECRET
- * (HMAC-SHA256 + expiração), então não pode ser forjado sem conhecer o
- * segredo do servidor.
+ * O cookie de sessão guarda APENAS o id do usuário + expiração, assinado
+ * (HMAC-SHA256 + AUTH_SECRET) — nunca o perfil nem o status "ativo". Isso é
+ * proposital: perfil/ativo são sempre relidos do banco a cada verificação
+ * (getUsuarioAtual), então rebaixar ou inativar um usuário tem efeito já na
+ * próxima requisição, sem depender do cookie ser trocado ou expirar.
+ *
+ * As decisões de "quem pode ver/fazer o quê" (a matriz ADMIN x TECNICO)
+ * ficam em lib/autorizacao.ts — este arquivo só resolve "quem está logado".
  */
 
-const COOKIE_EDICAO = "edicao_sessao";
-const SESSAO_DURACAO_MS = 1000 * 60 * 60 * 24 * 30; // 30 dias
+const COOKIE_SESSAO = "sessao_usuario";
+export { COOKIE_SESSAO };
+
+// Sessão de 12h: equilíbrio entre não pedir login o dia inteiro inteiro e não
+// manter uma sessão órfã por semanas depois que alguém é desligado/rebaixado
+// (já mitigado por getUsuarioAtual reler o banco, mas expiração curta é
+// defesa em profundidade).
+const SESSAO_DURACAO_MS = 1000 * 60 * 60 * 12;
 export const SESSAO_MAX_AGE_SEGUNDOS = Math.floor(SESSAO_DURACAO_MS / 1000);
-export { COOKIE_EDICAO };
+
+export type Perfil = "ADMIN" | "TECNICO";
+
+export type UsuarioSessao = {
+  id: number;
+  nome: string;
+  email: string;
+  perfil: Perfil;
+};
 
 function getSegredo(): string {
   const segredo = process.env.AUTH_SECRET;
@@ -38,48 +58,53 @@ function compararSeguro(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-/** Gera um token assinado "expiraEm.assinatura" que prova que a senha de edição foi validada. */
-export function criarTokenSessao(): string {
+/** Gera "usuarioId.expiraEm.assinatura" — prova de que o login foi validado, sem carregar perfil/status. */
+export function criarTokenSessao(usuarioId: number): string {
   const expiraEm = Date.now() + SESSAO_DURACAO_MS;
-  const payload = String(expiraEm);
+  const payload = `${usuarioId}.${expiraEm}`;
   return `${payload}.${assinar(payload)}`;
 }
 
-function tokenValido(token: string): boolean {
-  const [payload, assinatura] = token.split(".");
-  if (!payload || !assinatura) return false;
-  if (!compararSeguro(assinar(payload), assinatura)) return false;
-  const expiraEm = Number(payload);
-  return Number.isFinite(expiraEm) && Date.now() < expiraEm;
-}
+function usuarioIdDoToken(token: string): number | null {
+  const partes = token.split(".");
+  if (partes.length !== 3) return null;
+  const [idRaw, expiraRaw, assinatura] = partes;
+  const payload = `${idRaw}.${expiraRaw}`;
+  if (!compararSeguro(assinar(payload), assinatura)) return null;
 
-/** Compara a senha informada com EDIT_PASSWORD em tempo constante. */
-export function senhaCorreta(senha: string): boolean {
-  const esperada = process.env.EDIT_PASSWORD;
-  if (!esperada || !senha) return false;
-  return compararSeguro(senha, esperada);
-}
+  const expiraEm = Number(expiraRaw);
+  if (!Number.isFinite(expiraEm) || Date.now() >= expiraEm) return null;
 
-/** Lê o cookie de sessão (uso em Server Components/Actions) e diz se o modo de edição está liberado. */
-export function estaEmModoEdicao(): boolean {
-  const token = cookies().get(COOKIE_EDICAO)?.value;
-  if (!token) return false;
-  try {
-    return tokenValido(token);
-  } catch {
-    return false;
-  }
+  const usuarioId = Number(idRaw);
+  if (!Number.isInteger(usuarioId) || usuarioId <= 0) return null;
+
+  return usuarioId;
 }
 
 /**
- * Chame no início de toda Server Action que escreve no banco. Lança erro se
- * o modo de edição não estiver ativo — barreira de segurança independente
- * da UI (que já esconde os controles de edição nesse caso).
+ * Fonte única de verdade sobre "quem está logado agora". SEMPRE relê o
+ * usuário do banco (nunca confia em perfil/ativo vindos só do cookie) — por
+ * isso é assíncrona. Retorna null se: sem cookie, assinatura inválida,
+ * expirado, usuário não existe mais, ou usuário inativo.
+ *
+ * Use esta função (ou os helpers em lib/autorizacao.ts) em toda página,
+ * Server Action e rota de API que precise saber o usuário atual — nunca leia
+ * o cookie diretamente em outro lugar do código.
  */
-export function garantirModoEdicao(): void {
-  if (!estaEmModoEdicao()) {
-    throw new Error(
-      "Ação bloqueada: o modo de edição não está ativo nesta sessão. Destrave a edição na barra lateral com a senha para continuar."
-    );
+export async function getUsuarioAtual(): Promise<UsuarioSessao | null> {
+  const token = cookies().get(COOKIE_SESSAO)?.value;
+  if (!token) return null;
+
+  let usuarioId: number | null;
+  try {
+    usuarioId = usuarioIdDoToken(token);
+  } catch {
+    return null;
   }
+  if (usuarioId === null) return null;
+
+  const usuario = await prisma.usuario.findUnique({ where: { id: usuarioId } });
+  if (!usuario || !usuario.ativo) return null;
+
+  return { id: usuario.id, nome: usuario.nome, email: usuario.email, perfil: usuario.perfil as Perfil };
 }

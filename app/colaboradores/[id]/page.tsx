@@ -6,7 +6,7 @@ import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
 import { formatarTempo } from "@/lib/suporte";
 import { toggleColaboradorStatus } from "../actions";
-import { estaEmModoEdicao } from "@/lib/auth";
+import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,8 @@ function tempoDesde(dataIso: string): string {
 }
 
 export default async function ColaboradorDetalhePage({ params }: { params: { id: string } }) {
-  const podeEditar = estaEmModoEdicao();
+  const usuario = await requireAccess(RECURSOS.colaboradores);
+  const podeEditar = canPerform(usuario, ACOES["colaboradores.escrever"]);
   const id = Number(params.id);
   if (!id) notFound();
 

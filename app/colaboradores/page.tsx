@@ -7,7 +7,7 @@ import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
 import FiltrosColaboradores from "./FiltrosColaboradores";
 import { createColaborador, deleteColaborador, toggleColaboradorStatus } from "./actions";
-import { estaEmModoEdicao } from "@/lib/auth";
+import { ACOES, RECURSOS, canAccess, canPerform, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,9 @@ function ehCampoOrdenavel(valor: string): valor is CampoOrdenavel {
 }
 
 export default async function ColaboradoresPage({ searchParams }: { searchParams: SearchParams }) {
-  const podeEditar = estaEmModoEdicao();
+  const usuario = await requireAccess(RECURSOS.colaboradores);
+  const podeEditar = canPerform(usuario, ACOES["colaboradores.escrever"]);
+  const podeImportar = canAccess(usuario, RECURSOS.importacao);
   const q = primeiro(searchParams.q);
   const tipoPessoa = primeiro(searchParams.tipoPessoa);
   const regional = primeiro(searchParams.regional);
@@ -142,9 +144,11 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
         title="Colaboradores"
         description="Cadastro Mestre de Colaboradores — fonte única de verdade, sincronizada por Importação Massiva (Smart Sync)."
         action={
-          <Link href="/importacao" className="btn-primary">
-            Importar planilha
-          </Link>
+          podeImportar ? (
+            <Link href="/importacao" className="btn-primary">
+              Importar planilha
+            </Link>
+          ) : undefined
         }
       />
 
@@ -229,7 +233,7 @@ export default async function ColaboradoresPage({ searchParams }: { searchParams
             </form>
           ) : (
             <p className="rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 text-xs text-graphite-500">
-              Modo de visualização — destrave a edição na barra lateral para cadastrar.
+              Seu perfil não tem permissão para cadastrar colaboradores manualmente.
             </p>
           )}
         </div>

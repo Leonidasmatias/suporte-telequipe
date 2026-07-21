@@ -14,7 +14,7 @@ import {
   STATUS_SUPORTE,
   type FiltrosSuporte,
 } from "@/lib/suporte";
-import { estaEmModoEdicao } from "@/lib/auth";
+import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +41,8 @@ const badgeResultado: Record<string, string> = {
 };
 
 export default async function SuportePage({ searchParams }: { searchParams: SearchParams }) {
-  const podeEditar = estaEmModoEdicao();
+  const usuario = await requireAccess(RECURSOS.atendimentos);
+  const podeEditar = canPerform(usuario, ACOES["atendimentos.criar"]);
   const filtros: FiltrosSuporte = {
     dataInicio: primeiro(searchParams.data_inicio) || undefined,
     dataFim: primeiro(searchParams.data_fim) || undefined,

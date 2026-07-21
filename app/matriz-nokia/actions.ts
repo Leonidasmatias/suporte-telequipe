@@ -3,12 +3,12 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { ETAPAS } from "@/lib/imt";
-import { garantirModoEdicao } from "@/lib/auth";
+import { ACOES, requirePerformAction } from "@/lib/autorizacao";
 
 const CODIGOS_VALIDOS = new Set<string>(ETAPAS.map((e) => e.codigo));
 
 export async function createAvaliacao(formData: FormData) {
-  garantirModoEdicao();
+  await requirePerformAction(ACOES["matrizNokia.escrever"]);
 
   const colaboradorId = Number(formData.get("colaborador_id"));
   const etapa = String(formData.get("etapa") || "");
@@ -42,7 +42,7 @@ export async function createAvaliacao(formData: FormData) {
 }
 
 export async function deleteAvaliacao(formData: FormData) {
-  garantirModoEdicao();
+  await requirePerformAction(ACOES["matrizNokia.escrever"]);
 
   const id = Number(formData.get("id"));
   if (!id) return;

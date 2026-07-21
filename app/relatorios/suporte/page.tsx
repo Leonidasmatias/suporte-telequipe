@@ -9,6 +9,7 @@ import {
   RESULTADOS_SUPORTE,
   type FiltrosSuporte,
 } from "@/lib/suporte";
+import { RECURSOS, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,7 @@ function primeiro(valor: string | string[] | undefined): string {
  * aqui para montar o relatório filtrado.
  */
 export default async function RelatorioSuportePage({ searchParams }: { searchParams: SearchParams }) {
+  await requireAccess(RECURSOS.relatorios);
   const filtros: FiltrosSuporte = {
     dataInicio: primeiro(searchParams.data_inicio) || undefined,
     dataFim: primeiro(searchParams.data_fim) || undefined,

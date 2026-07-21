@@ -15,15 +15,66 @@
  * (ou: npx prisma db seed)
  */
 import { PrismaClient } from "@prisma/client";
+import { hashSenha } from "../lib/senha";
 
 const prisma = new PrismaClient();
 
 const ETAPAS = ["MOS", "XML", "TX", "SWAP", "FAM", "REVERSA"] as const;
 
+/**
+ * V7 — Etapa 1/2 (Autenticação/Gestão de Usuários): garante que sempre
+ * exista pelo menos uma conta ADMIN, mesmo em bancos já populados com dados
+ * de exemplo — sem isso, um banco existente jamais teria como fazer login
+ * depois que o sistema de autenticação por usuário substituiu o antigo
+ * "modo de edição" por senha compartilhada.
+ *
+ * Idempotente (upsert por e-mail) e roda ANTES do early-return do seed de
+ * exemplo abaixo, de propósito: mesmo em um banco de produção que já tem
+ * colaboradores/atendimentos e por isso pula o restante do seed, a conta
+ * admin inicial ainda precisa ser criada.
+ *
+ * Credenciais vêm de variáveis de ambiente (nunca hardcoded). Se
+ * ADMIN_SEED_EMAIL/ADMIN_SEED_SENHA não estiverem definidas, usa valores de
+ * desenvolvimento padrão e avisa no console — apenas para não travar o
+ * ambiente local; em produção essas variáveis devem ser configuradas.
+ */
+async function seedUsuarioAdmin() {
+  const email = process.env.ADMIN_SEED_EMAIL || "leonidas.matias@telequipeprojetos.com.br";
+  const nome = process.env.ADMIN_SEED_NOME || "Administrador";
+  const senha = process.env.ADMIN_SEED_SENHA || "Tlqp@1234";
+
+  if (!process.env.ADMIN_SEED_EMAIL || !process.env.ADMIN_SEED_SENHA) {
+    console.warn(
+      "ADMIN_SEED_EMAIL/ADMIN_SEED_SENHA não definidas — usando credenciais " +
+        "padrão de desenvolvimento. Configure-as em produção e troque a " +
+        "senha após o primeiro login."
+    );
+  }
+
+  const usuarioExistente = await prisma.usuario.findUnique({ where: { email } });
+  if (usuarioExistente) {
+    console.log(`Usuário admin "${email}" já existe. Seed de usuário ignorado.`);
+    return;
+  }
+
+  await prisma.usuario.create({
+    data: {
+      nome,
+      email,
+      senhaHash: hashSenha(senha),
+      perfil: "ADMIN",
+      ativo: true,
+    },
+  });
+  console.log(`Usuário ADMIN inicial criado: ${email}`);
+}
+
 async function main() {
+  await seedUsuarioAdmin();
+
   const existentes = await prisma.colaborador.count();
   if (existentes > 0) {
-    console.log("Banco já contém dados. Seed ignorado.");
+    console.log("Banco já contém dados de colaboradores. Seed de exemplo ignorado.");
     return;
   }
 

@@ -12,12 +12,13 @@ import {
   NOME_ETAPA,
   LIMIAR_ALERTA,
 } from "@/lib/imt";
-import { estaEmModoEdicao } from "@/lib/auth";
+import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
 export default async function InsightsOperacionaisPage() {
-  const podeEditar = estaEmModoEdicao();
+  const usuario = await requireAccess(RECURSOS.insightsOperacionais);
+  const podeEditar = canPerform(usuario, ACOES["insights.escrever"]);
   const colaboradores = await buildColaboradorInsights();
   const alertas = buildAlertas(colaboradores);
   const sugestoes = buildSugestoesTreinamento(colaboradores);

@@ -11,10 +11,18 @@ import {
   calcularTendenciaGeral,
   NOME_ETAPA,
 } from "@/lib/imt";
+import { RECURSOS, canAccess, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
+  const usuarioLogado = await requireAccess(RECURSOS.dashboard);
+  // Camada 1: TECNICO não tem acesso a /colaboradores (ver lib/permissoes.ts)
+  // — por isso o card "Colaboradores recentes" abaixo, que linka para
+  // /colaboradores/[id], só é exibido para quem realmente pode abrir esse
+  // link. Sem essa checagem, o TECNICO veria um card "quebrado" (leva a
+  // /acesso-negado) na própria Home, que é uma página liberada para ele.
+  const podeVerColaboradores = canAccess(usuarioLogado, RECURSOS.colaboradores);
   const [
     totalColaboradores,
     totalAtivos,
@@ -173,31 +181,33 @@ export default async function HomePage() {
         )}
       </div>
 
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="card">
-          <h2 className="mb-4 text-base font-semibold text-white">Colaboradores recentes</h2>
-          {colaboradoresRecentes.length === 0 ? (
-            <EmptyState message="Nenhum colaborador cadastrado ainda." />
-          ) : (
-            <div className="space-y-3">
-              {colaboradoresRecentes.map((c) => (
-                <Link
-                  key={c.id}
-                  href={`/colaboradores/${c.id}`}
-                  className="flex items-center justify-between rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 transition-colors duration-150 hover:border-neon-500/40 hover:bg-neon-500/[0.03]"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-graphite-100">{c.nome}</p>
-                    <p className="text-xs text-graphite-500">
-                      {c.cargo ?? "Cargo não definido"} · {c.regional ?? "Regional não definida"}
-                    </p>
-                  </div>
-                  <span className={`badge ${c.status === "ativo" ? "chip-success" : "chip-neutral"}`}>{c.status}</span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+      <div className={`mt-8 grid grid-cols-1 gap-6 ${podeVerColaboradores ? "lg:grid-cols-2" : ""}`}>
+        {podeVerColaboradores && (
+          <div className="card">
+            <h2 className="mb-4 text-base font-semibold text-white">Colaboradores recentes</h2>
+            {colaboradoresRecentes.length === 0 ? (
+              <EmptyState message="Nenhum colaborador cadastrado ainda." />
+            ) : (
+              <div className="space-y-3">
+                {colaboradoresRecentes.map((c) => (
+                  <Link
+                    key={c.id}
+                    href={`/colaboradores/${c.id}`}
+                    className="flex items-center justify-between rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 transition-colors duration-150 hover:border-neon-500/40 hover:bg-neon-500/[0.03]"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-graphite-100">{c.nome}</p>
+                      <p className="text-xs text-graphite-500">
+                        {c.cargo ?? "Cargo não definido"} · {c.regional ?? "Regional não definida"}
+                      </p>
+                    </div>
+                    <span className={`badge ${c.status === "ativo" ? "chip-success" : "chip-neutral"}`}>{c.status}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="card">
           <h2 className="mb-4 text-base font-semibold text-white">Treinamentos recentes</h2>

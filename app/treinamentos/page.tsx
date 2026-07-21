@@ -2,12 +2,13 @@ import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import EmptyState from "@/components/EmptyState";
 import { createTreinamento, deleteTreinamento } from "./actions";
-import { estaEmModoEdicao } from "@/lib/auth";
+import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
 export default async function TreinamentosPage() {
-  const podeEditar = estaEmModoEdicao();
+  const usuario = await requireAccess(RECURSOS.treinamentos);
+  const podeEditar = canPerform(usuario, ACOES["treinamentos.escrever"]);
   const treinamentosRaw = await prisma.treinamento.findMany({
     include: { colaboradores: true },
     orderBy: { createdAt: "desc" },
@@ -55,7 +56,7 @@ export default async function TreinamentosPage() {
             </form>
           ) : (
             <p className="rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 text-xs text-graphite-500">
-              Modo de visualização — destrave a edição na barra lateral para cadastrar.
+              Seu perfil não tem permissão para cadastrar treinamentos.
             </p>
           )}
         </div>

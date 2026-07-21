@@ -2,10 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { garantirModoEdicao } from "@/lib/auth";
+import { ACOES, requirePerformAction } from "@/lib/autorizacao";
 
 export async function createTreinamento(formData: FormData) {
-  garantirModoEdicao();
+  await requirePerformAction(ACOES["treinamentos.escrever"]);
 
   const titulo = String(formData.get("nome") || "").trim();
   const categoria = String(formData.get("categoria") || "").trim();
@@ -30,7 +30,7 @@ export async function createTreinamento(formData: FormData) {
 }
 
 export async function deleteTreinamento(formData: FormData) {
-  garantirModoEdicao();
+  await requirePerformAction(ACOES["treinamentos.escrever"]);
 
   const id = Number(formData.get("id"));
   if (!id) return;

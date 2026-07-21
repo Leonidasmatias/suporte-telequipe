@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { ETAPAS, TREINAMENTO_SUGERIDO, type EtapaCodigo } from "@/lib/imt";
-import { garantirModoEdicao } from "@/lib/auth";
+import { ACOES, requirePerformAction } from "@/lib/autorizacao";
 
 const CODIGOS_VALIDOS = new Set<string>(ETAPAS.map((e) => e.codigo));
 
@@ -13,7 +13,7 @@ const CODIGOS_VALIDOS = new Set<string>(ETAPAS.map((e) => e.codigo));
  * e já vincula o colaborador correspondente.
  */
 export async function criarTreinamentoSugerido(formData: FormData) {
-  garantirModoEdicao();
+  await requirePerformAction(ACOES["insights.escrever"]);
 
   const colaboradorId = Number(formData.get("colaborador_id"));
   const etapa = String(formData.get("etapa") || "");

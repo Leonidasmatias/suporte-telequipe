@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { calcularTempoAtendimento } from "@/lib/suporte";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { garantirModoEdicao } from "@/lib/auth";
+import { ACOES, requirePerformAction } from "@/lib/autorizacao";
 
 function campoTexto(formData: FormData, nome: string): string {
   return String(formData.get(nome) || "").trim();
@@ -21,7 +21,7 @@ function campoIdOpcional(formData: FormData, nome: string): number | null {
 }
 
 export async function createTicket(formData: FormData) {
-  garantirModoEdicao();
+  await requirePerformAction(ACOES["atendimentos.criar"]);
 
   const dataAtendimentoRaw = campoTexto(formData, "data_atendimento");
   const horaInicio = campoTexto(formData, "hora_inicio");
@@ -72,7 +72,7 @@ export async function createTicket(formData: FormData) {
 }
 
 export async function updateTicket(formData: FormData) {
-  garantirModoEdicao();
+  await requirePerformAction(ACOES["atendimentos.editar"]);
 
   const id = Number(formData.get("id"));
   if (!id) return;
@@ -127,7 +127,7 @@ export async function updateTicket(formData: FormData) {
 
 /** Encerra rapidamente um atendimento (usado pelo botão "Encerrar atendimento" na tela de detalhes). */
 export async function closeTicket(formData: FormData) {
-  garantirModoEdicao();
+  await requirePerformAction(ACOES["atendimentos.encerrar"]);
 
   const id = Number(formData.get("id"));
   if (!id) return;
@@ -144,7 +144,9 @@ export async function closeTicket(formData: FormData) {
 }
 
 export async function deleteTicket(formData: FormData) {
-  garantirModoEdicao();
+  // Exclusão de atendimento é classificada como exclusão administrativa
+  // sensível (não listada no acesso operacional do TECNICO) — admin-only.
+  await requirePerformAction(ACOES["atendimentos.excluir"]);
 
   const id = Number(formData.get("id"));
   if (!id) return;

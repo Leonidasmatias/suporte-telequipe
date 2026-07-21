@@ -34,15 +34,22 @@ Após inspecionar o arquivo oficial `BASE_COLABORADORES_INICIAL_2026.xlsx`, dois
 - Em parte das linhas, `EmpresaNome` vinha preenchido com "nome da pessoa + número de documento (tipo CPF)" em vez do nome da empresa — típico de colaboradores autônomos sem empresa formal. `lib/colaboradores.ts` detecta esse padrão e remove o número automaticamente (nunca é gravado no banco).
 - Migration `20260707020000_operadoras_e_nome_normalizado`: renomeia a coluna, remove a unicidade antiga e cria `nomeNormalizado` com backfill.
 
-### V6.2 — Controle de acesso (edição x visualização)
+### V6.2 (obsoleta) — Controle de acesso por senha compartilhada
 
-Qualquer pessoa com o link visualiza o sistema livremente, sem login. Ações de escrita (criar, editar, excluir, alternar status, importar) exigem que o **modo de edição** esteja destravado — feito na barra lateral, informando a senha em `EDIT_PASSWORD`.
+**Substituída pela V7 (Etapas 1–3) abaixo.** Até a V6.2, qualquer pessoa com o link visualizava o sistema livremente, sem login, e ações de escrita exigiam apenas destravar um "modo de edição" compartilhado com uma senha única (`EDIT_PASSWORD`). Esse modelo foi completamente removido: não há mais visualização livre nem senha compartilhada.
 
-- **`lib/auth.ts`**: `senhaCorreta()` compara com `EDIT_PASSWORD` (comparação em tempo constante); `criarTokenSessao()`/`estaEmModoEdicao()` geram/validam um cookie httpOnly assinado com HMAC-SHA256 (`AUTH_SECRET`), válido por 30 dias; `garantirModoEdicao()` lança erro se chamado sem o modo de edição ativo.
-- **`app/auth/actions.ts`**: `desbloquearEdicao` (valida a senha e grava o cookie) e `bloquearEdicao` (remove o cookie).
-- **`components/EditModeControl.tsx`**: widget na barra lateral — mostra "Modo de edição ativo" com botão "Bloquear", ou um campo de senha para destravar.
-- Toda Server Action que escreve no banco chama `garantirModoEdicao()` como primeira linha (defesa em profundidade, independente da UI). Cada página esconde os formulários/botões de criar, editar e excluir quando o modo de edição não está ativo (`estaEmModoEdicao()` lido diretamente nos Server Components).
-- Variáveis obrigatórias em produção: `EDIT_PASSWORD` (a senha) e `AUTH_SECRET` (string aleatória para assinar o cookie — gere com `openssl rand -hex 32`). Sem elas, o modo de edição não pode ser destravado.
+### V7 — Autenticação por usuário, Gestão de Usuários e Permissões (Etapas 1–3)
+
+O sistema agora exige login individual (e-mail + senha) para qualquer acesso, com dois perfis: **ADMIN** (acesso completo, incluindo Usuários e operações administrativas sensíveis) e **TECNICO** (acesso operacional: atendimentos, colaboradores, equipes, Matriz Nokia, treinamentos, relatórios/exportações — sem acesso a Gestão de Usuários, importação em massa ou exclusões administrativas).
+
+- **`prisma/schema.prisma`**: modelo `Usuario` (`email`, `senhaHash`, `perfil: PerfilUsuario`, `ativo`), independente do Cadastro Mestre de Colaboradores.
+- **`lib/senha.ts`**: hash de senha com `scrypt` nativo do Node (`hashSenha`/`verificarSenha`, comparação em tempo constante) — sem dependência nova.
+- **`lib/auth.ts`**: `criarTokenSessao()` gera um cookie httpOnly assinado (HMAC-SHA256 com `AUTH_SECRET`) contendo **apenas** o id do usuário e a expiração (12h) — nunca perfil/ativo. `getUsuarioAtual()` sempre busca o usuário no banco a cada requisição, então uma desativação ou mudança de perfil tem efeito imediato na próxima requisição, sem depender de dados antigos no cookie.
+- **`lib/autorizacao.ts`**: módulo central de autorização — matrizes `RECURSOS` (acesso a páginas/menus) e `ACOES` (permissão de ações de escrita) por perfil, mais os helpers `canAccess`/`canPerform` (leitura), `requireAuthenticatedUser`/`requireAdmin`/`requireAccess` (páginas — redirecionam para `/login` ou `/acesso-negado`), `requireAuthenticatedAction`/`requireAdminAction`/`requirePerformAction` (Server Actions — lançam `ErroNaoAutenticado`/`ErroSemPermissao`) e `verificarAcessoApi` (rotas de API — retorna 401/403 padronizados). Toda a autorização do sistema passa por este módulo único; não há checagens de perfil espalhadas pelo código.
+- **`app/login/`**: página pública de login (`page.tsx` + `LoginForm.tsx` + `actions.ts`) — mensagem de erro genérica ("E-mail ou senha inválidos.") tanto para e-mail inexistente quanto senha errada ou conta inativa, evitando enumeração de usuários.
+- **`app/acesso-negado/page.tsx`**: página de acesso negado (403) exibida quando um usuário autenticado tenta acessar algo fora do seu perfil.
+- Toda página protegida chama `requireAccess`/`requireAdmin` como primeira linha; toda Server Action de escrita chama `requirePerformAction`/`requireAdminAction`/`requireAuthenticatedAction` como primeira linha (defesa em profundidade, independente da UI); a única rota de API (`app/suporte/exportar/route.ts`) usa `verificarAcessoApi`. O menu lateral (`components/Sidebar.tsx`) é filtrado por `canAccess` conforme o perfil logado.
+- Variável obrigatória em produção: `AUTH_SECRET` (string aleatória para assinar o cookie — gere com `openssl rand -hex 32`). A conta ADMIN inicial é criada por `npm run seed` a partir de `ADMIN_SEED_EMAIL`/`ADMIN_SEED_NOME`/`ADMIN_SEED_SENHA` (ver `.env.example`).
 
 ## O que mudou na V3
 

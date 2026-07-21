@@ -5,7 +5,7 @@ import StatCard from "@/components/StatCard";
 import ScoreBar from "@/components/ScoreBar";
 import { createAvaliacao, deleteAvaliacao } from "./actions";
 import { ETAPAS, NOME_ETAPA, buildColaboradorInsights, type EtapaCodigo } from "@/lib/imt";
-import { estaEmModoEdicao } from "@/lib/auth";
+import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,8 @@ function nivelBadgeClass(nivel: string) {
 }
 
 export default async function MatrizNokiaPage() {
-  const podeEditar = estaEmModoEdicao();
+  const usuario = await requireAccess(RECURSOS.matrizNokia);
+  const podeEditar = canPerform(usuario, ACOES["matrizNokia.escrever"]);
   const avaliacoesRaw = await prisma.avaliacaoCompetencia.findMany({
     include: { colaborador: true, competencia: true },
     orderBy: { createdAt: "desc" },
@@ -109,7 +110,7 @@ export default async function MatrizNokiaPage() {
             </form>
           ) : (
             <p className="rounded-lg border border-graphite-700 bg-graphite-900/40 px-4 py-3 text-xs text-graphite-500">
-              Modo de visualização — destrave a edição na barra lateral para registrar.
+              Seu perfil não tem permissão para registrar avaliações.
             </p>
           )}
         </div>
