@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
+import ExportarExcelButton from "@/components/ExportarExcelButton";
 import {
   buildWhereSuporte,
   getIndicadoresSuporte,
@@ -51,6 +52,22 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
     tecnico: primeiro(searchParams.tecnico) || undefined,
     busca: primeiro(searchParams.busca) || undefined,
   };
+
+  // Mesmos filtros aplicados na tela, repassados como query string para o
+  // botão de exportação — a exportação nunca fica dessincronizada do que
+  // está sendo exibido na listagem abaixo.
+  const queryStringExportacao = new URLSearchParams(
+    Object.entries({
+      data_inicio: filtros.dataInicio,
+      data_fim: filtros.dataFim,
+      colaborador_id: filtros.colaboradorId ? String(filtros.colaboradorId) : undefined,
+      projeto: filtros.projeto,
+      categoria: filtros.categoria,
+      status: filtros.status,
+      tecnico: filtros.tecnico,
+      busca: filtros.busca,
+    }).filter((par): par is [string, string] => par[1] !== undefined)
+  ).toString();
 
   const [kpis, indicadores, ultimosAtendimentos, colaboradores, ticketsRaw] = await Promise.all([
     getKpisSuporte(),
@@ -160,9 +177,12 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
       </div>
 
       <div className="mt-8 card">
-        <h2 className="mb-4 text-base font-semibold text-white">
-          Atendimentos ({tickets.length})
-        </h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-white">
+            Atendimentos ({tickets.length})
+          </h2>
+          <ExportarExcelButton queryString={queryStringExportacao} />
+        </div>
         {tickets.length === 0 ? (
           <EmptyState message="Nenhum atendimento encontrado para os filtros selecionados." />
         ) : (
