@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import UserMenu from "./UserMenu";
 import { canAccess } from "@/lib/permissoes";
@@ -17,32 +16,25 @@ import type { UsuarioSessao } from "@/lib/auth";
 
 export default function Sidebar({ usuario }: { usuario: UsuarioSessao }) {
   const pathname = usePathname();
+
   const itensVisiveis = navItems.filter((item) =>
     canAccess(usuario, item.recurso)
   );
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-graphite-800 bg-graphite-900/95 backdrop-blur">
-      <div className="flex h-16 items-center gap-3 border-b border-graphite-800 px-5">
-        <div className="relative h-11 w-11 flex-shrink-0">
-          <Image
-            src="/images/logo-telequipe.png"
-            alt="Logo TELEQUIPE"
-            fill
-            priority
-            sizes="44px"
-            className="object-contain"
-          />
-        </div>
+      <div className="flex h-24 flex-col justify-center border-b border-graphite-800 px-5">
+        <h1 className="text-xl font-extrabold leading-none tracking-wide text-white">
+          TELEQUIPE
+        </h1>
 
-        <div className="min-w-0 leading-tight">
-          <p className="text-sm font-semibold tracking-wide text-white">
-            TELEQUIPE SUPORTE - STA
-          </p>
-          <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-neon-400">
-            Operator Command Center
-          </p>
-        </div>
+        <h2 className="mt-1 text-lg font-bold leading-none text-white">
+          SUPORTE - STA
+        </h2>
+
+        <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-neon-400">
+          CENTRO DE OPERAÇÕES
+        </p>
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
@@ -111,7 +103,9 @@ export default function Sidebar({ usuario }: { usuario: UsuarioSessao }) {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-neon-500" />
           </span>
 
-          <p className="text-xs text-graphite-400">Sistema operacional</p>
+          <p className="text-xs text-graphite-400">
+            Sistema operacional
+          </p>
         </div>
 
         <p className="mt-1 text-[11px] text-graphite-600">
