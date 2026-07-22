@@ -15,20 +15,25 @@ export default async function LoginPage() {
   if (usuario) redirect("/home");
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-graphite-950 px-4">
-      <div className="w-full max-w-sm card">
-        <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-neon-500 text-sm font-bold text-graphite-950 shadow-glow">
-            LT
+    <div className="flex min-h-screen items-center justify-center bg-[#ffffff] px-4">
+      <div className="w-full max-w-md animate-slide-up">
+        <div className="mb-8 flex flex-col items-center gap-3 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-neon-500 text-2xl font-bold text-[#ffffff] shadow-glow">
+            T
           </div>
           <div>
-            <p className="text-sm font-semibold tracking-wide text-white">TELEQUIPE SUPORTE - STA</p>
-            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-neon-400">
-              Operator Command Center
+            <h1 className="text-xl font-semibold tracking-tight text-graphite-100">Sistema de Suporte STA</h1>
+            <p className="mt-1 text-xs font-medium uppercase tracking-[0.14em] text-neon-500">
+              TELEQUIPE Projetos e Telecomunicações
             </p>
           </div>
         </div>
-        <LoginForm />
+        <div className="card border-graphite-800 shadow-panel">
+          <LoginForm />
+        </div>
+        <p className="mt-6 text-center text-[11px] text-graphite-500">
+          © {new Date().getFullYear()} Telequipe Projetos e Telecomunicações
+        </p>
       </div>
     </div>
   );

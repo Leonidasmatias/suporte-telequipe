@@ -40,7 +40,7 @@ export function ToggleAtivoButton({ id, ativo }: { id: number; ativo: boolean })
       >
         {pending ? "Aguarde..." : ativo ? "Ativo" : "Inativo"}
       </button>
-      {erro && <p className="mt-1 text-xs text-red-400">{erro}</p>}
+      {erro && <p className="mt-1 text-xs text-red-600">{erro}</p>}
     </div>
   );
 }
@@ -64,7 +64,7 @@ export function ToggleAtivoAcaoGrande({ id, ativo }: { id: number; ativo: boolea
       <button type="button" onClick={handleClick} disabled={pending} className="btn-secondary">
         {pending ? "Aguarde..." : ativo ? "Desativar" : "Ativar"}
       </button>
-      {erro && <p className="mt-1.5 max-w-[220px] text-right text-xs text-red-400">{erro}</p>}
+      {erro && <p className="mt-1.5 max-w-[220px] text-right text-xs text-red-600">{erro}</p>}
     </div>
   );
 }
@@ -91,7 +91,7 @@ export function ExcluirUsuarioButton({ id }: { id: number }) {
       <button type="button" onClick={handleClick} disabled={pending} className="btn-danger">
         {pending ? "Excluindo..." : "Excluir"}
       </button>
-      {erro && <p className="mt-1.5 max-w-[220px] text-right text-xs text-red-400">{erro}</p>}
+      {erro && <p className="mt-1.5 max-w-[220px] text-right text-xs text-red-600">{erro}</p>}
     </div>
   );
 }

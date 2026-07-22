@@ -72,7 +72,7 @@ export default async function UsuariosPage() {
                       </td>
                       <td>{u.email}</td>
                       <td>
-                        <span className={`badge ${u.perfil === "ADMIN" ? "chip-warning" : "chip-neutral"}`}>
+                        <span className={`badge ${u.perfil === "ADMIN" ? "chip-info" : "chip-success"}`}>
                           {ROTULO_PERFIL[u.perfil] ?? u.perfil}
                         </span>
                       </td>

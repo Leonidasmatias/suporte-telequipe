@@ -146,7 +146,7 @@ export default async function HomePage() {
             {alertas.map((alerta) => (
               <div key={alerta.etapa} className="rounded-lg border border-amber-500/20 bg-graphite-900/60 px-4 py-3">
                 <p className="text-sm font-medium text-graphite-100">{alerta.etapaNome}</p>
-                <p className="mt-1 text-xs text-amber-400">
+                <p className="mt-1 text-xs text-amber-600">
                   {alerta.quantidade} colaborador(es) abaixo de 70% de IMT
                 </p>
               </div>

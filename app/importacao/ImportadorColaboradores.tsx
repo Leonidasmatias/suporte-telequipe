@@ -70,9 +70,9 @@ export default function ImportadorColaboradores() {
   if (resultado?.ok) {
     const r = resultado.relatorio;
     return (
-      <div className="card animate-slide-up border-neon-500/25 bg-neon-500/[0.04]">
+      <div className="card animate-slide-up border-emerald-200 bg-emerald-50">
         <div className="mb-2 flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-neon-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <h2 className="text-base font-semibold text-white">Importação concluída</h2>
@@ -116,12 +116,12 @@ export default function ImportadorColaboradores() {
         <p className="mt-3 text-xs text-graphite-500">
           Layout oficial: Nome, TipoPessoa, Regional, Cadastro, EmpresaNome, Cargo, Telefone.
         </p>
-        {erroAnalise && <p className="mt-3 text-sm text-red-400">{erroAnalise}</p>}
+        {erroAnalise && <p className="mt-3 text-sm text-red-600">{erroAnalise}</p>}
       </div>
 
       {resultado && !resultado.ok && (
         <div className="card animate-slide-up border-red-500/25 bg-red-500/[0.04]">
-          <p className="text-sm font-medium text-red-400">{resultado.erro}</p>
+          <p className="text-sm font-medium text-red-600">{resultado.erro}</p>
         </div>
       )}
 
@@ -138,8 +138,8 @@ export default function ImportadorColaboradores() {
 
             {preview.errosGlobais.length > 0 && (
               <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-4 py-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-red-400">Erros</p>
-                <ul className="mt-1 list-inside list-disc text-sm text-red-300">
+                <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Erros</p>
+                <ul className="mt-1 list-inside list-disc text-sm text-red-600">
                   {preview.errosGlobais.map((e, i) => (
                     <li key={i}>{e}</li>
                   ))}
@@ -149,7 +149,7 @@ export default function ImportadorColaboradores() {
 
             {preview.comErro > 0 && (
               <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-4 py-3">
-                <p className="text-sm text-amber-400">
+                <p className="text-sm text-amber-600">
                   {preview.comErro} linha(s) com erro serão ignoradas na sincronização — corrija e reenvie se necessário.
                 </p>
               </div>
@@ -232,10 +232,10 @@ function LinhaColaborador({ pessoa }: { pessoa: ColaboradorImportado }) {
         ) : (
           <ul className="space-y-0.5">
             {pessoa.erros.map((e, i) => (
-              <li key={`e${i}`} className="text-xs text-red-400">{e}</li>
+              <li key={`e${i}`} className="text-xs text-red-600">{e}</li>
             ))}
             {pessoa.avisos.map((a, i) => (
-              <li key={`a${i}`} className="text-xs text-amber-400">{a}</li>
+              <li key={`a${i}`} className="text-xs text-amber-600">{a}</li>
             ))}
           </ul>
         )}

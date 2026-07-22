@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Sidebar from "@/components/Sidebar";
+import Header from "@/components/Header";
 import { getUsuarioAtual } from "@/lib/auth";
 import "./globals.css";
 
@@ -11,8 +12,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "SUPORTE TELEQUIPE — Leonidas Tech",
-  description: "Operator Command Center · Gestão operacional de equipes técnicas de telecom",
+  title: "TELEQUIPE SUPORTE STA",
+  description: "Sistema de Suporte STA · TELEQUIPE Projetos e Telecomunicações",
 };
 
 /**
@@ -40,9 +41,12 @@ export default async function RootLayout({
         {usuario ? (
           <>
             <Sidebar usuario={usuario} />
-            <main className="ml-64 min-h-screen animate-fade-in p-6 lg:p-8">
-              <div className="mx-auto max-w-[1600px]">{children}</div>
-            </main>
+            <div className="ml-64 flex min-h-screen flex-col">
+              <Header usuario={usuario} />
+              <main className="flex-1 animate-fade-in p-6 lg:p-8">
+                <div className="mx-auto max-w-[1600px]">{children}</div>
+              </main>
+            </div>
           </>
         ) : (
           children

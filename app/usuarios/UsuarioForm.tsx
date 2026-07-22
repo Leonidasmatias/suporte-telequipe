@@ -99,7 +99,7 @@ export default function UsuarioForm({ action, modo, valoresIniciais, bloquearTro
           </p>
         )}
       </div>
-      {erro && <p className="text-sm text-red-400">{erro}</p>}
+      {erro && <p className="text-sm text-red-600">{erro}</p>}
       <div className="flex justify-end border-t border-graphite-800 pt-4">
         <button type="submit" disabled={pending || !nome || !email} className="btn-primary">
           {pending ? "Salvando..." : "Salvar"}

@@ -52,8 +52,13 @@ export default function LoginForm() {
           placeholder="••••••••"
         />
       </div>
-      {erro && <p className="text-sm text-red-400">{erro}</p>}
+      {erro && (
+        <p className="animate-fade-in rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+          {erro}
+        </p>
+      )}
       <button type="submit" disabled={pending || !email || !senha} className="btn-primary w-full">
+        {pending && <span className="spinner" aria-hidden />}
         {pending ? "Entrando..." : "Entrar"}
       </button>
     </form>

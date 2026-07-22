@@ -151,9 +151,9 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
         <div>
           <p className="label-field mb-1">Categoria do atendimento</p>
           {!ticket.categoriaPrincipal && (
-            <div className="mb-3 rounded-lg border border-amber-700/40 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-200">
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               <span className="font-semibold">Categoria legada:</span> {ticket.categoria}
-              <p className="mt-1 text-xs text-amber-200/70">
+              <p className="mt-1 text-xs text-amber-700/80">
                 Este atendimento foi registrado antes da classificação hierárquica existir. O valor acima é
                 preservado e continua sendo exibido normalmente. Para reclassificar, selecione uma Categoria
                 Principal abaixo e salve — caso contrário, esta categoria legada permanece inalterada.

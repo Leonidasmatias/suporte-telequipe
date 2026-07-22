@@ -6,15 +6,15 @@ type StatCardProps = {
 };
 
 const accentMap: Record<string, string> = {
-  brand: "text-neon-400 bg-neon-500/10",
-  green: "text-neon-400 bg-neon-500/10",
-  amber: "text-amber-400 bg-amber-500/10",
-  slate: "text-graphite-200 bg-graphite-700/60",
+  brand: "text-neon-500 bg-neon-50",
+  green: "text-emerald-600 bg-emerald-50",
+  amber: "text-amber-600 bg-amber-50",
+  slate: "text-graphite-300 bg-graphite-950",
 };
 
 export default function StatCard({ label, value, hint, accent = "brand" }: StatCardProps) {
   return (
-    <div className="card transition-colors duration-150 hover:border-graphite-600">
+    <div className="card transition-shadow duration-200 hover:shadow-panel">
       <p className="text-xs font-medium uppercase tracking-wide text-graphite-400">{label}</p>
       <p
         className={`mt-2 inline-flex rounded-lg px-2 py-1 text-3xl font-semibold tabular-nums ${accentMap[accent]}`}

@@ -15,9 +15,9 @@ const MENSAGENS: Record<Estado, string | null> = {
 const ESTILO_MENSAGEM: Record<Estado, string> = {
   ocioso: "",
   gerando: "text-graphite-400",
-  sucesso: "text-green-400",
+  sucesso: "text-emerald-600",
   vazio: "text-graphite-400",
-  erro: "text-red-400",
+  erro: "text-red-600",
 };
 
 /**
