@@ -82,7 +82,7 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="sm:col-span-2">
             <label className="label-field">Colaborador</label>
             <select name="colaborador_id" className="input-field" defaultValue={ticket.colaboradorId ?? ""}>
@@ -101,6 +101,16 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
           <div>
             <label className="label-field">Cliente</label>
             <input name="cliente" defaultValue={ticket.cliente ?? ""} className="input-field" />
+          </div>
+          <div>
+            <label className="label-field">Site</label>
+            <input
+              name="site"
+              maxLength={30}
+              defaultValue={ticket.site ?? ""}
+              className="input-field"
+              placeholder="Ex.: SN-AQDIK4"
+            />
           </div>
         </div>
 

@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
       colaboradorRegional: t.colaborador?.regional ?? null,
       liderNomeHistorico: t.liderNomeHistorico,
       projeto: t.projeto,
+      site: t.site,
       cliente: t.cliente,
       categoria: t.categoria,
       descricaoProblema: t.descricaoProblema,

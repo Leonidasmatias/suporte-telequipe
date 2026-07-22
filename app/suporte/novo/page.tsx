@@ -36,7 +36,7 @@ export default async function NovoAtendimentoPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div className="sm:col-span-2">
             <label className="label-field">Colaborador</label>
             <select name="colaborador_id" className="input-field">
@@ -55,6 +55,10 @@ export default async function NovoAtendimentoPage() {
           <div>
             <label className="label-field">Cliente</label>
             <input name="cliente" className="input-field" placeholder="Ex: Nokia / Operadora X" />
+          </div>
+          <div>
+            <label className="label-field">Site</label>
+            <input name="site" maxLength={30} className="input-field" placeholder="Ex.: SN-AQDIK4" />
           </div>
         </div>
 

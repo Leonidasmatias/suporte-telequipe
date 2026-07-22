@@ -38,7 +38,8 @@ function ticket(overrides: Partial<AtendimentoParaExportacao> = {}): Atendimento
     colaboradorRegional: "Sudeste",
     liderNomeHistorico: null,
     projeto: "Projeto Alfa",
-    cliente: "Site Alfa 001",
+    site: "SN-AQDIK4",
+    cliente: "Cliente Alfa Telecom",
     categoria: "MOS",
     descricaoProblema: "Falha de sinal",
     tecnicoResponsavel: "Maria Souza",
@@ -363,5 +364,93 @@ describe("formatação de duração e hora", () => {
     expect(formatarHoraExportacao("9:05")).toBe("09:05");
     expect(formatarHoraExportacao("14:30")).toBe("14:30");
     expect(formatarHoraExportacao("25:00")).toBe(""); // hora inválida
+  });
+});
+
+describe("validarFiltrosExportacao — exportação por site", () => {
+  it("aceita e sanitiza o filtro de site (texto livre, mesmo tratamento de projeto/técnico)", () => {
+    const { filtros, erros } = validarFiltrosExportacao(params({ site: "  SN-AQDIK4  " }));
+    expect(erros).toHaveLength(0);
+    expect(filtros.site).toBe("SN-AQDIK4");
+  });
+
+  it("o where do Prisma reflete o filtro de site (contains, case-insensitive)", () => {
+    const { filtros } = validarFiltrosExportacao(params({ site: "AQDIK4" }));
+    const where = buildWhereSuporte(filtros);
+    expect(JSON.stringify(where)).toContain("AQDIK4");
+    expect(JSON.stringify(where)).toContain("insensitive");
+  });
+});
+
+describe("coluna SITE na exportação Excel", () => {
+  it("todas as colunas anteriores são preservadas, na mesma ordem, mais a nova coluna Site e a renomeação Site→Cliente", () => {
+    // Regressão explícita: a única mudança estrutural desta planilha é a
+    // inserção de "Site" (dado novo, campo SupportTicket.site) logo após
+    // "Projeto", e a coluna que antes se chamava "Site" (mas já mostrava o
+    // campo `cliente`) passou a se chamar "Cliente" — mesma posição, mesmo
+    // dado, só o rótulo mudou para refletir o que ela sempre mostrou.
+    // Nenhuma outra coluna, nome ou posição foi alterada.
+    expect(COLUNAS_ATENDIMENTOS).toEqual([
+      "Número",
+      "Data de abertura",
+      "Hora de abertura",
+      "Data de encerramento",
+      "Hora de encerramento",
+      "Colaborador",
+      "Telefone",
+      "Regional",
+      "Projeto",
+      "Site",
+      "Cliente",
+      "Categoria",
+      "Descrição",
+      "Técnico responsável",
+      "Solução aplicada",
+      "Resultado",
+      "Status",
+      "Tempo de atendimento",
+      "Observações",
+    ]);
+  });
+
+  it("montarLinhaPlanilha preenche a coluna Site com o site do atendimento", () => {
+    const linha = montarLinhaPlanilha(ticket({ site: "SN-AQDIK4" }));
+    const idxSite = COLUNAS_ATENDIMENTOS.indexOf("Site");
+    expect(linha[idxSite]).toBe("SN-AQDIK4");
+  });
+
+  it("montarLinhaPlanilha preenche a coluna Cliente com o mesmo dado de sempre (campo cliente, comportamento inalterado)", () => {
+    const linha = montarLinhaPlanilha(ticket({ cliente: "Cliente Alfa Telecom" }));
+    const idxCliente = COLUNAS_ATENDIMENTOS.indexOf("Cliente");
+    expect(linha[idxCliente]).toBe("Cliente Alfa Telecom");
+  });
+
+  it("atendimento sem site (antigo ou administrativo) deixa a célula Site vazia, sem quebrar a exportação", () => {
+    const linha = montarLinhaPlanilha(ticket({ site: null }));
+    const idxSite = COLUNAS_ATENDIMENTOS.indexOf("Site");
+    expect(linha[idxSite]).toBe("");
+  });
+
+  it("o arquivo .xlsx real tem a coluna Site preenchida corretamente (round-trip)", async () => {
+    const t = ticket({ site: "SN-AQDIK4" });
+    const buffer = await gerarWorkbookAtendimentos([t], {}, new Date("2026-01-15T12:00:00Z"));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as Buffer);
+    const aba = wb.getWorksheet("Atendimentos")!;
+    const colSite = COLUNAS_ATENDIMENTOS.indexOf("Site") + 1;
+    expect(aba.getRow(2).getCell(colSite).value).toBe("Site"); // cabeçalho
+    expect(aba.getRow(3).getCell(colSite).value).toBe("SN-AQDIK4"); // dado
+  });
+
+  it("exportação de um atendimento antigo sem site preserva todas as demais colunas normalmente", async () => {
+    const t = ticket({ site: null, projeto: "Projeto Alfa", cliente: "Cliente Alfa Telecom" });
+    const buffer = await gerarWorkbookAtendimentos([t], {}, new Date("2026-01-15T12:00:00Z"));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as Buffer);
+    const aba = wb.getWorksheet("Atendimentos")!;
+    const linhaDado = aba.getRow(3);
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Site") + 1).value).toBe("");
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Projeto") + 1).value).toBe("Projeto Alfa");
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Cliente") + 1).value).toBe("Cliente Alfa Telecom");
   });
 });

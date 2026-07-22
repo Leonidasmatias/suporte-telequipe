@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { calcularTempoAtendimento } from "@/lib/suporte";
+import { calcularTempoAtendimento, normalizarSite } from "@/lib/suporte";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ACOES, requirePerformAction } from "@/lib/autorizacao";
@@ -29,6 +29,7 @@ export async function createTicket(formData: FormData) {
   const colaboradorId = campoIdOpcional(formData, "colaborador_id");
   const projeto = campoOpcional(formData, "projeto");
   const cliente = campoOpcional(formData, "cliente");
+  const site = normalizarSite(campoOpcional(formData, "site"));
   const tipoAtendimento = campoTexto(formData, "tipo_atendimento");
   const categoria = campoTexto(formData, "categoria");
   const descricaoProblema = campoTexto(formData, "descricao_problema");
@@ -53,6 +54,7 @@ export async function createTicket(formData: FormData) {
       colaboradorId,
       projeto,
       cliente,
+      site,
       tipoAtendimento,
       categoria,
       descricaoProblema,
@@ -83,6 +85,7 @@ export async function updateTicket(formData: FormData) {
   const colaboradorId = campoIdOpcional(formData, "colaborador_id");
   const projeto = campoOpcional(formData, "projeto");
   const cliente = campoOpcional(formData, "cliente");
+  const site = normalizarSite(campoOpcional(formData, "site"));
   const tipoAtendimento = campoTexto(formData, "tipo_atendimento");
   const categoria = campoTexto(formData, "categoria");
   const descricaoProblema = campoTexto(formData, "descricao_problema");
@@ -108,6 +111,7 @@ export async function updateTicket(formData: FormData) {
       colaboradorId,
       projeto,
       cliente,
+      site,
       tipoAtendimento,
       categoria,
       descricaoProblema,

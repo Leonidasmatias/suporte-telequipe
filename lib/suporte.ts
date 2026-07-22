@@ -86,6 +86,28 @@ export function calcularTempoAtendimento(
   return diferenca;
 }
 
+/** Limite de tamanho do campo Site — mesmo valor usado no formulário (`maxLength`) e aqui, na normalização do servidor. */
+export const TAMANHO_MAXIMO_SITE = 30;
+
+/**
+ * Normaliza o valor digitado do campo Site (ex.: "sn-aqdik4" → "SN-AQDIK4"):
+ * remove espaços nas pontas, converte para maiúsculas, mantém apenas
+ * letras/números/hífen (descarta qualquer outro caractere silenciosamente,
+ * em vez de rejeitar o formulário inteiro) e limita a `TAMANHO_MAXIMO_SITE`
+ * caracteres. Retorna `null` quando vazio (ou quando só sobrarem caracteres
+ * inválidos) — o campo é opcional, e `null` é o valor salvo para
+ * atendimentos antigos ou administrativos sem site associado.
+ */
+export function normalizarSite(valorBruto: string | null | undefined): string | null {
+  const semEspacosNasPontas = (valorBruto ?? "").trim();
+  if (!semEspacosNasPontas) return null;
+
+  const apenasValidos = semEspacosNasPontas.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+  if (!apenasValidos) return null;
+
+  return apenasValidos.slice(0, TAMANHO_MAXIMO_SITE);
+}
+
 export type KpisSuporte = {
   atendimentosHoje: number;
   atendimentosMes: number;
@@ -151,6 +173,7 @@ export type FiltrosSuporte = {
   categoria?: string;
   status?: string;
   tecnico?: string;
+  site?: string;
   busca?: string;
 };
 
@@ -177,6 +200,9 @@ export function buildWhereSuporte(filtros: FiltrosSuporte): Prisma.SupportTicket
   if (filtros.tecnico) {
     and.push({ tecnicoResponsavel: { contains: filtros.tecnico, mode: "insensitive" } });
   }
+  // Busca parcial e sem diferenciar maiúsculas/minúsculas: "AQDIK4" encontra
+  // "SN-AQDIK4", "SN-AQD" encontra qualquer site que contenha esse trecho.
+  if (filtros.site) and.push({ site: { contains: filtros.site, mode: "insensitive" } });
 
   if (filtros.busca) {
     const termo = filtros.busca.trim();

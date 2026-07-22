@@ -44,7 +44,9 @@ export type AtendimentoParaExportacao = {
   /** Snapshot histórico (atendimentos anteriores à reestruturação V6 — ver schema.prisma). */
   liderNomeHistorico: string | null;
   projeto: string | null;
-  /** Mapeado para a coluna "Site" do relatório — ver nota em `montarLinhaPlanilha`. */
+  /** Site atendido (ex.: "SN-AQDIK4"), campo `SupportTicket.site` — coluna "Site" do relatório. */
+  site: string | null;
+  /** Coluna "Cliente" do relatório (antes de o campo `site` existir, esta coluna se chamava "Site" e usava este mesmo valor como aproximação — ver histórico da migration `20260722140000_add_site_suporte`). */
   cliente: string | null;
   categoria: string;
   descricaoProblema: string;
@@ -142,6 +144,9 @@ export function validarFiltrosExportacao(
 
   const tecnico = textoLivreSeguro(params.get("tecnico"));
   if (tecnico) filtros.tecnico = tecnico;
+
+  const site = textoLivreSeguro(params.get("site"));
+  if (site) filtros.site = site;
 
   const busca = textoLivreSeguro(params.get("busca"));
   if (busca) filtros.busca = busca;
@@ -325,6 +330,7 @@ export const COLUNAS_ATENDIMENTOS = [
   "Regional",
   "Projeto",
   "Site",
+  "Cliente",
   "Categoria",
   "Descrição",
   "Técnico responsável",
@@ -336,20 +342,20 @@ export const COLUNAS_ATENDIMENTOS = [
 ] as const;
 
 /**
- * Monta uma linha (18 valores, na ordem de `COLUNAS_ATENDIMENTOS`) já sanitizada.
+ * Monta uma linha (19 valores, na ordem de `COLUNAS_ATENDIMENTOS`) já sanitizada.
  *
- * Duas aproximações deliberadas, por o modelo `SupportTicket` não ter esses
- * campos dedicados (e este projeto não altera o banco sem necessidade
- * comprovada — ver `prisma/schema.prisma`):
- *  - "Data/Hora de encerramento": não existe timestamp de encerramento na
- *    tabela. Quando `status === "Finalizado"`, usamos `updatedAt` (atualizado
- *    automaticamente pela Server Action `closeTicket`) como aproximação —
- *    caso contrário ficam em branco. Se o atendimento finalizado for editado
- *    depois, `updatedAt` deixa de refletir exatamente o momento do
- *    encerramento; é a melhor aproximação disponível sem migração.
- *  - "Site": a tabela não tem uma coluna "site" — usamos `cliente`, o campo
- *    existente mais próximo (cliente/site atendido). Sinalizar para o time se
- *    o significado de "Site" pedido for outro.
+ * "Data/Hora de encerramento": não existe timestamp de encerramento na
+ * tabela. Quando `status === "Finalizado"`, usamos `updatedAt` (atualizado
+ * automaticamente pela Server Action `closeTicket`) como aproximação — caso
+ * contrário ficam em branco. Se o atendimento finalizado for editado depois,
+ * `updatedAt` deixa de refletir exatamente o momento do encerramento; é a
+ * melhor aproximação disponível sem um campo dedicado.
+ *
+ * "Site" (coluna nova) usa o campo `site` de verdade (`SupportTicket.site`,
+ * adicionado pela migration `20260722140000_add_site_suporte`). "Cliente"
+ * (coluna já existente, só renomeada de "Site" para "Cliente" — mesmo dado
+ * de sempre, `t.cliente`, sem nenhuma mudança de valor ou lógica) continua
+ * exatamente como era.
  */
 export function montarLinhaPlanilha(t: AtendimentoParaExportacao): Array<string | number | Date> {
   const finalizado = t.status === "Finalizado";
@@ -363,6 +369,7 @@ export function montarLinhaPlanilha(t: AtendimentoParaExportacao): Array<string 
     sanitizarCelulaTexto(t.colaboradorTelefone),
     sanitizarCelulaTexto(t.colaboradorRegional),
     sanitizarCelulaTexto(t.projeto),
+    sanitizarCelulaTexto(t.site),
     sanitizarCelulaTexto(t.cliente),
     sanitizarCelulaTexto(t.categoria),
     sanitizarCelulaTexto(t.descricaoProblema),
@@ -390,6 +397,7 @@ const LARGURAS_COLUNAS: Record<(typeof COLUNAS_ATENDIMENTOS)[number], number> = 
   Regional: 14,
   Projeto: 20,
   Site: 20,
+  Cliente: 20,
   Categoria: 16,
   Descrição: 42,
   "Técnico responsável": 22,

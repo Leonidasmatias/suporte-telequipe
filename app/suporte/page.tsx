@@ -51,6 +51,7 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
     categoria: primeiro(searchParams.categoria) || undefined,
     status: primeiro(searchParams.status) || undefined,
     tecnico: primeiro(searchParams.tecnico) || undefined,
+    site: primeiro(searchParams.site) || undefined,
     busca: primeiro(searchParams.busca) || undefined,
   };
 
@@ -66,6 +67,7 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
       categoria: filtros.categoria,
       status: filtros.status,
       tecnico: filtros.tecnico,
+      site: filtros.site,
       busca: filtros.busca,
     }).filter((par): par is [string, string] => par[1] !== undefined)
   ).toString();
@@ -88,6 +90,7 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
     dataAtendimento: t.dataAtendimento.toISOString().slice(0, 10),
     colaboradorNome: t.colaborador?.nome ?? t.liderNomeHistorico ?? null,
     projeto: t.projeto,
+    site: t.site,
     categoria: t.categoria,
     tempoAtendimento: t.tempoAtendimento,
     resultado: t.resultado,
@@ -166,6 +169,10 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
             <label className="label-field">Técnico responsável</label>
             <input name="tecnico" defaultValue={filtros.tecnico} className="input-field" placeholder="Nome do técnico" />
           </div>
+          <div>
+            <label className="label-field">Site</label>
+            <input name="site" defaultValue={filtros.site} className="input-field" placeholder="Ex.: SN-AQDIK4" />
+          </div>
           <div className="sm:col-span-2 lg:col-span-3">
             <label className="label-field">Buscar (colaborador, projeto, categoria ou número)</label>
             <input name="busca" defaultValue={filtros.busca} className="input-field" placeholder="Digite para buscar..." />
@@ -195,6 +202,7 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
                   <th>Data</th>
                   <th>Colaborador</th>
                   <th>Projeto</th>
+                  <th>Site</th>
                   <th>Categoria</th>
                   <th>Tempo</th>
                   <th>Resultado</th>
@@ -209,6 +217,7 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
                     <td>{t.dataAtendimento}</td>
                     <td>{t.colaboradorNome || "—"}</td>
                     <td>{t.projeto || "—"}</td>
+                    <td>{t.site || "—"}</td>
                     <td>{t.categoria}</td>
                     <td className="tabular-nums">{formatarTempo(t.tempoAtendimento)}</td>
                     <td>

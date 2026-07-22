@@ -218,6 +218,12 @@ model SupportTicket {
 
   projeto String?
   cliente String?
+  // Site atendido (ex.: "SN-AQDIK4"). Opcional — preserva atendimentos
+  // antigos (registrados antes deste campo existir) e permite atendimentos
+  // administrativos sem site associado. Normalizado em maiúsculas na
+  // camada de Server Action (app/suporte/actions.ts, normalizarSite em
+  // lib/suporte.ts) antes de chegar aqui — nunca validado de novo no schema.
+  site String?
 
   tipoAtendimento String
   categoria       String
