@@ -22,7 +22,7 @@ export default async function LoginPage() {
             LT
           </div>
           <div>
-            <p className="text-sm font-semibold tracking-wide text-white">LEONIDAS TECH</p>
+            <p className="text-sm font-semibold tracking-wide text-white">TELEQUIPE SUPORTE - STA</p>
             <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-neon-400">
               Operator Command Center
             </p>
