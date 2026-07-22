@@ -15,7 +15,14 @@ import {
   type FiltrosSuporte,
 } from "@/lib/suporte";
 import { obterRotuloCategoriaExibicao } from "@/lib/categoriasSuporte";
-import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
+import {
+  ACOES,
+  RECURSOS,
+  canPerform,
+  requireAccess,
+  criarFiltroDeAcessoAtendimentos,
+  filtrosPermitidosParaPerfil,
+} from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +51,15 @@ const badgeResultado: Record<string, string> = {
 export default async function SuportePage({ searchParams }: { searchParams: SearchParams }) {
   const usuario = await requireAccess(RECURSOS.atendimentos);
   const podeEditar = canPerform(usuario, ACOES["atendimentos.criar"]);
-  const filtros: FiltrosSuporte = {
+  const ehAdmin = usuario.perfil === "ADMIN";
+
+  // Escopo de acesso por perfil (missão "Controle de visualização e
+  // exportação por perfil"): ADMIN enxerga tudo; TECNICO só os próprios
+  // atendimentos (usuarioResponsavelId). Combinado com os filtros da tela
+  // via AND em toda consulta abaixo — nunca aplicado "depois" em memória.
+  const escopo = criarFiltroDeAcessoAtendimentos(usuario);
+
+  const filtrosBrutos: FiltrosSuporte = {
     dataInicio: primeiro(searchParams.data_inicio) || undefined,
     dataFim: primeiro(searchParams.data_fim) || undefined,
     colaboradorId: primeiro(searchParams.colaborador_id) ? Number(primeiro(searchParams.colaborador_id)) : undefined,
@@ -54,10 +69,14 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
     subcategoria: primeiro(searchParams.subcategoria) || undefined,
     detalhamento: primeiro(searchParams.detalhamento) || undefined,
     status: primeiro(searchParams.status) || undefined,
+    // Filtro "Técnico Responsável" é exclusivo do ADMIN (ver
+    // filtrosPermitidosParaPerfil abaixo) — para TECNICO, mesmo que este
+    // parâmetro seja enviado manualmente na URL, ele é sempre descartado.
     tecnico: primeiro(searchParams.tecnico) || undefined,
     site: primeiro(searchParams.site) || undefined,
     busca: primeiro(searchParams.busca) || undefined,
   };
+  const filtros = filtrosPermitidosParaPerfil(filtrosBrutos, usuario);
 
   // Mesmos filtros aplicados na tela, repassados como query string para o
   // botão de exportação — a exportação nunca fica dessincronizada do que
@@ -80,12 +99,12 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
   ).toString();
 
   const [kpis, indicadores, ultimosAtendimentos, colaboradores, ticketsRaw] = await Promise.all([
-    getKpisSuporte(),
-    getIndicadoresSuporte(filtros),
-    getUltimosAtendimentos(5),
+    getKpisSuporte(escopo),
+    getIndicadoresSuporte(filtros, escopo),
+    getUltimosAtendimentos(5, escopo),
     prisma.colaborador.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
     prisma.supportTicket.findMany({
-      where: buildWhereSuporte(filtros),
+      where: { AND: [escopo, buildWhereSuporte(filtros)] },
       include: { colaborador: true },
       orderBy: { dataAtendimento: "desc" },
     }),
@@ -118,6 +137,10 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
           ) : undefined
         }
       />
+
+      {!ehAdmin && (
+        <p className="mb-4 -mt-2 text-xs text-graphite-500">Visualizando somente seus atendimentos.</p>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Atendimentos hoje" value={kpis.atendimentosHoje} accent="brand" />
@@ -164,10 +187,12 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
               ))}
             </select>
           </div>
-          <div>
-            <label className="label-field">Técnico responsável</label>
-            <input name="tecnico" defaultValue={filtros.tecnico} className="input-field" placeholder="Nome do técnico" />
-          </div>
+          {ehAdmin && (
+            <div>
+              <label className="label-field">Técnico responsável</label>
+              <input name="tecnico" defaultValue={filtros.tecnico} className="input-field" placeholder="Nome do técnico" />
+            </div>
+          )}
           <div>
             <label className="label-field">Site</label>
             <input name="site" defaultValue={filtros.site} className="input-field" placeholder="Ex.: SN-AQDIK4" />

@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { getUsuarioAtual, type UsuarioSessao } from "@/lib/auth";
 import { RECURSOS, ACOES, canAccess, canPerform, type Recurso, type Acao } from "@/lib/permissoes";
+import type { FiltrosSuporte } from "@/lib/suporte";
 
 /**
  * ETAPA 3 — PERMISSÕES. Estratégia central de autorização do sistema.
@@ -104,20 +106,98 @@ export async function requirePerformAction(acao: Acao): Promise<UsuarioSessao> {
   return usuario;
 }
 
+export type ResultadoAcessoApi =
+  | { ok: true; usuario: UsuarioSessao }
+  | { ok: false; status: 401 | 403; body: { ok: false; error: string } };
+
 /**
  * Para a rota de API (app/suporte/exportar/route.ts): 401 se não autenticado,
- * 403 se autenticado mas sem permissão de acesso ao recurso, null se pode
- * prosseguir. Mensagens genéricas — nunca detalhe interno.
+ * 403 se autenticado mas sem permissão de acesso ao recurso, `{ ok: true,
+ * usuario }` se pode prosseguir — o `usuario` é devolvido porque a rota
+ * precisa dele para calcular o escopo (ver criarFiltroDeAcessoAtendimentos
+ * abaixo); antes desta missão a função só devolvia `null` no sucesso, mas aí
+ * a rota não tinha como saber QUEM está exportando, só que a exportação era
+ * permitida. Mensagens de erro sempre genéricas — nunca detalhe interno.
  */
-export async function verificarAcessoApi(
-  recurso: Recurso
-): Promise<{ status: 401 | 403; body: { ok: false; error: string } } | null> {
+export async function verificarAcessoApi(recurso: Recurso): Promise<ResultadoAcessoApi> {
   const usuario = await getUsuarioAtual();
   if (!usuario) {
-    return { status: 401, body: { ok: false, error: "Não autenticado." } };
+    return { ok: false, status: 401, body: { ok: false, error: "Não autenticado." } };
   }
   if (!canAccess(usuario, recurso)) {
-    return { status: 403, body: { ok: false, error: "Sem permissão para acessar este recurso." } };
+    return { ok: false, status: 403, body: { ok: false, error: "Sem permissão para acessar este recurso." } };
   }
-  return null;
+  return { ok: true, usuario };
+}
+
+// ---------------------------------------------------------------------------
+// ESCOPO DE ACESSO A ATENDIMENTOS (missão "Controle de visualização e
+// exportação por perfil") — única fonte de verdade de "o que este usuário
+// pode ver/editar/exportar em Suporte". Nenhuma página, Server Action ou
+// rota deve calcular esta regra por conta própria (se algum dia existir mais
+// de um jeito de restringir por perfil, é aqui que ele muda).
+//
+// Vínculo real usado: SupportTicket.usuarioResponsavelId (FK para Usuario,
+// preenchido pela sessão na criação — nunca a partir de formulário). O campo
+// `tecnicoResponsavel` (texto livre) nunca é usado para autorização — ver
+// nota no schema.prisma.
+// ---------------------------------------------------------------------------
+
+/**
+ * Escopo (cláusula `where` do Prisma) que toda consulta de SupportTicket
+ * deve combinar com os filtros da tela via AND:
+ *
+ *   where: { AND: [criarFiltroDeAcessoAtendimentos(usuario), filtrosDaTela] }
+ *
+ * ADMIN → `{}` (nenhuma restrição adicional, escopo global). Qualquer outro
+ * valor de perfil (TECNICO, ou um valor corrompido/desconhecido que não seja
+ * literalmente "ADMIN") → restrito aos próprios atendimentos. A checagem é
+ * por allowlist (`=== "ADMIN"`), não por blacklist (`!== "TECNICO"`), de
+ * propósito: um perfil inválido/inesperado nunca cai no ramo global por
+ * engano — falha sempre fechado (restritivo), nunca aberto.
+ *
+ * Atendimentos antigos (sem usuarioResponsavelId, registrados antes desta
+ * migration) nunca aparecem para nenhum TECNICO — só para ADMIN — porque
+ * `usuarioResponsavelId: usuario.id` nunca é `null`.
+ */
+export function criarFiltroDeAcessoAtendimentos(usuario: UsuarioSessao): Prisma.SupportTicketWhereInput {
+  if (usuario.perfil === "ADMIN") return {};
+  return { usuarioResponsavelId: usuario.id };
+}
+
+/**
+ * Checagem pontual (sem consultar o banco) se um atendimento JÁ CARREGADO
+ * pertence ao escopo do usuário — útil quando o atendimento já foi lido por
+ * outro caminho e falta só validar a propriedade antes de agir sobre ele.
+ * Prefira sempre restringir a própria consulta (`criarFiltroDeAcessoAtendimentos`
+ * dentro do `where`) a carregar o registro primeiro e checar depois — esta
+ * função é o complemento para os casos em que o dado já está em mãos.
+ *
+ * ADMIN sempre `true`. TECNICO só `true` se `usuarioResponsavelId` for
+ * exatamente o dele — um atendimento legado (`usuarioResponsavelId: null`)
+ * nunca é `true` para TECNICO, mesmo que o texto de `tecnicoResponsavel`
+ * pareça coincidir com o nome dele.
+ */
+export function podeAcessarAtendimento(
+  ticket: { usuarioResponsavelId: number | null },
+  usuario: UsuarioSessao
+): boolean {
+  if (usuario.perfil === "ADMIN") return true;
+  return ticket.usuarioResponsavelId === usuario.id;
+}
+
+/**
+ * Remove, para quem não é ADMIN, os filtros que só fazem sentido para quem
+ * enxerga todos os técnicos (hoje: "Técnico Responsável" — buscar por nome
+ * de QUALQUER técnico). Chame antes de repassar os filtros da tela para
+ * `buildWhereSuporte`, tanto na listagem quanto na exportação — assim um
+ * parâmetro `tecnico` enviado manualmente por um TECNICO (via URL, query
+ * string ou formulário adulterado) é sempre ignorado, nunca aplicado.
+ * Os demais filtros (categoria, site, projeto, período, status, busca)
+ * continuam funcionando normalmente dentro do escopo do usuário.
+ */
+export function filtrosPermitidosParaPerfil(filtros: FiltrosSuporte, usuario: UsuarioSessao): FiltrosSuporte {
+  if (usuario.perfil === "ADMIN") return filtros;
+  const { tecnico, ...resto } = filtros;
+  return resto;
 }

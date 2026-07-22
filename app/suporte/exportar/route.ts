@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { buildWhereSuporte } from "@/lib/suporte";
-import { RECURSOS, verificarAcessoApi } from "@/lib/autorizacao";
+import {
+  RECURSOS,
+  verificarAcessoApi,
+  criarFiltroDeAcessoAtendimentos,
+  filtrosPermitidosParaPerfil,
+} from "@/lib/autorizacao";
 import {
   validarFiltrosExportacao,
   montarNomeArquivo,
@@ -25,24 +30,40 @@ import {
  * Os filtros nunca são confiados como vieram do frontend: são revalidados e
  * saneados aqui (`validarFiltrosExportacao`) antes de qualquer consulta —
  * mesmo que um usuário monte a URL manualmente. Sem filtro nenhum, exporta a
- * base inteira (mesma regra da listagem em tela). Sem paginação: busca todos
- * os registros que atendem à consulta, nunca só "a página atual" (a própria
- * tela /suporte também não pagina hoje).
+ * base inteira PERMITIDA PELO ESCOPO do usuário (mesma regra da listagem em
+ * tela) — nunca a base inteira do sistema para quem não é ADMIN. Sem
+ * paginação: busca todos os registros que atendem à consulta, nunca só "a
+ * página atual" (a própria tela /suporte também não pagina hoje).
+ *
+ * Controle de acesso por perfil (missão "Controle de visualização e
+ * exportação por perfil"): o escopo (`criarFiltroDeAcessoAtendimentos`) é
+ * calculado a partir do `usuario` devolvido por `verificarAcessoApi` — nunca
+ * de um `usuarioId`/`tecnicoId`/perfil vindo da query string ou de qualquer
+ * outro dado controlado pelo navegador. Um TECNICO chamando esta rota
+ * diretamente (curl/fetch manual, com ou sem parâmetros forjados como
+ * `usuarioId=` ou `tecnico=`) só recebe os próprios atendimentos — o mesmo
+ * escopo usado na listagem, nos detalhes e nos relatórios.
  */
 export async function GET(request: NextRequest) {
   try {
-    const acessoNegado = await verificarAcessoApi(RECURSOS.exportacoes);
-    if (acessoNegado) {
-      return NextResponse.json(acessoNegado.body, { status: acessoNegado.status });
+    const acesso = await verificarAcessoApi(RECURSOS.exportacoes);
+    if (!acesso.ok) {
+      return NextResponse.json(acesso.body, { status: acesso.status });
     }
+    const { usuario } = acesso;
+    const escopo = criarFiltroDeAcessoAtendimentos(usuario);
 
-    const { filtros, erros } = validarFiltrosExportacao(request.nextUrl.searchParams);
+    const { filtros: filtrosBrutos, erros } = validarFiltrosExportacao(request.nextUrl.searchParams);
     if (erros.length > 0) {
       return NextResponse.json({ ok: false, error: erros.join(" ") }, { status: 400 });
     }
+    // Ignora, para quem não é ADMIN, qualquer tentativa de filtrar por
+    // "Técnico Responsável" de outra pessoa — mesmo enviado manualmente na
+    // query string da exportação.
+    const filtros = filtrosPermitidosParaPerfil(filtrosBrutos, usuario);
 
     const ticketsRaw = await prisma.supportTicket.findMany({
-      where: buildWhereSuporte(filtros),
+      where: { AND: [escopo, buildWhereSuporte(filtros)] },
       include: { colaborador: true },
       orderBy: { dataAtendimento: "desc" },
     });

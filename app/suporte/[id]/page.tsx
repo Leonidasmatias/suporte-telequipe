@@ -5,7 +5,7 @@ import TempoAtendimentoInputs from "@/components/TempoAtendimentoInputs";
 import SeletorCategoriaSuporte from "@/components/SeletorCategoriaSuporte";
 import { updateTicket, closeTicket, deleteTicket } from "../actions";
 import { TIPOS_ATENDIMENTO, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
-import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
+import { ACOES, RECURSOS, canPerform, requireAccess, criarFiltroDeAcessoAtendimentos } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +23,14 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
   const id = Number(params.id);
   if (!id) notFound();
 
-  const ticket = await prisma.supportTicket.findUnique({
-    where: { id },
+  // A restrição de acesso já entra na PRÓPRIA consulta (findFirst com o
+  // escopo do usuário no where) — nunca "busca por id, carrega os dados, e
+  // só depois checa permissão". Um TECNICO tentando abrir o atendimento de
+  // outro (id de outra pessoa digitado direto na URL) recebe exatamente a
+  // mesma resposta 404 de "não existe" — nada nos dados do atendimento
+  // chega a ser carregado nem exposto nesse caso.
+  const ticket = await prisma.supportTicket.findFirst({
+    where: { AND: [{ id }, criarFiltroDeAcessoAtendimentos(usuario)] },
     include: { colaborador: true },
   });
   if (!ticket) notFound();

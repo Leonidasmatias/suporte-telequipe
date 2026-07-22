@@ -127,8 +127,19 @@ function inicioDoMes(data: Date): Date {
   return new Date(data.getFullYear(), data.getMonth(), 1);
 }
 
-/** KPIs exibidos no topo da página /suporte. */
-export async function getKpisSuporte(): Promise<KpisSuporte> {
+/**
+ * KPIs exibidos no topo da página /suporte.
+ *
+ * `escopo` é a cláusula de acesso por perfil (ver
+ * `criarFiltroDeAcessoAtendimentos` em lib/autorizacao.ts) — combinada via
+ * AND em CADA uma das 5 consultas abaixo, para que os totais de um TECNICO
+ * reflitam somente os atendimentos dele, nunca a base inteira. Chamador
+ * nunca deve omitir o escopo em produção; o padrão `{}` (sem restrição)
+ * existe só para não quebrar chamadas que já tinham o escopo global (ADMIN).
+ */
+export async function getKpisSuporte(
+  escopo: Prisma.SupportTicketWhereInput = {}
+): Promise<KpisSuporte> {
   const agora = new Date();
   const hoje = inicioDoDia(agora);
   const amanha = new Date(hoje);
@@ -138,22 +149,25 @@ export async function getKpisSuporte(): Promise<KpisSuporte> {
   const [atendimentosHoje, atendimentosMes, tempoMedioAgg, resolvidosHoje, pendentes] =
     await Promise.all([
       prisma.supportTicket.count({
-        where: { dataAtendimento: { gte: hoje, lt: amanha } },
+        where: { AND: [escopo, { dataAtendimento: { gte: hoje, lt: amanha } }] },
       }),
       prisma.supportTicket.count({
-        where: { dataAtendimento: { gte: mesAtual } },
+        where: { AND: [escopo, { dataAtendimento: { gte: mesAtual } }] },
       }),
       prisma.supportTicket.aggregate({
+        where: escopo,
         _avg: { tempoAtendimento: true },
       }),
       prisma.supportTicket.count({
         where: {
-          dataAtendimento: { gte: hoje, lt: amanha },
-          resultado: "Resolvido",
+          AND: [
+            escopo,
+            { dataAtendimento: { gte: hoje, lt: amanha }, resultado: "Resolvido" },
+          ],
         },
       }),
       prisma.supportTicket.count({
-        where: { status: { not: "Finalizado" } },
+        where: { AND: [escopo, { status: { not: "Finalizado" } }] },
       }),
     ]);
 
@@ -273,10 +287,18 @@ export type IndicadoresSuporte = {
 /**
  * Indicadores automáticos usados no dashboard local de /suporte e em
  * /relatorios/suporte. Todos calculados sobre o conjunto de tickets que
- * atende aos filtros informados (sem filtro = toda a base).
+ * atende aos filtros informados (sem filtro = toda a base) E ao `escopo` de
+ * acesso do usuário (ver `criarFiltroDeAcessoAtendimentos` em
+ * lib/autorizacao.ts) — para um TECNICO, todos os totais/agrupamentos/
+ * rankings abaixo consideram somente os próprios atendimentos, nunca a base
+ * inteira. `escopo` default `{}` (sem restrição) só para não quebrar
+ * chamadas já existentes com escopo global (ADMIN).
  */
-export async function getIndicadoresSuporte(filtros: FiltrosSuporte = {}): Promise<IndicadoresSuporte> {
-  const where = buildWhereSuporte(filtros);
+export async function getIndicadoresSuporte(
+  filtros: FiltrosSuporte = {},
+  escopo: Prisma.SupportTicketWhereInput = {}
+): Promise<IndicadoresSuporte> {
+  const where: Prisma.SupportTicketWhereInput = { AND: [escopo, buildWhereSuporte(filtros)] };
 
   const tickets = await prisma.supportTicket.findMany({
     where,
@@ -378,9 +400,19 @@ export type TicketResumo = {
   status: string;
 };
 
-/** Últimos atendimentos registrados, para o card "Últimos atendimentos". */
-export async function getUltimosAtendimentos(limite = 5): Promise<TicketResumo[]> {
+/**
+ * Últimos atendimentos registrados, para o card "Últimos atendimentos".
+ * `escopo` (ver lib/autorizacao.ts) é aplicado na própria consulta — para um
+ * TECNICO, o `take: limite` nunca "rouba" uma vaga de atendimento de outro
+ * usuário: a limitação e o escopo são combinados na mesma consulta, nunca
+ * filtrados depois de carregado.
+ */
+export async function getUltimosAtendimentos(
+  limite = 5,
+  escopo: Prisma.SupportTicketWhereInput = {}
+): Promise<TicketResumo[]> {
   const tickets = await prisma.supportTicket.findMany({
+    where: escopo,
     include: { colaborador: true },
     orderBy: { createdAt: "desc" },
     take: limite,

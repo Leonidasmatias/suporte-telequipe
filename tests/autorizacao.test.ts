@@ -327,31 +327,42 @@ describe("requirePerformAction — checagem granular por ação", () => {
 // ---------------------------------------------------------------------------
 
 describe("verificarAcessoApi — respostas HTTP padronizadas", () => {
-  it("retorna 401 quando não há sessão (chamada direta à API sem cookie)", async () => {
+  it("retorna ok:false com 401 quando não há sessão (chamada direta à API sem cookie)", async () => {
     cookieAtual = undefined;
     const resultado = await verificarAcessoApi(RECURSOS.exportacoes);
-    expect(resultado).toEqual({ status: 401, body: { ok: false, error: "Não autenticado." } });
+    expect(resultado).toEqual({
+      ok: false,
+      status: 401,
+      body: { ok: false, error: "Não autenticado." },
+    });
   });
 
-  it("retorna 403 quando autenticado mas sem permissão para o recurso", async () => {
+  it("retorna ok:false com 403 quando autenticado mas sem permissão para o recurso", async () => {
     cookieAtual = criarTokenSessao(2);
     usuarioFindUniqueMock.mockResolvedValue(usuarioTecnico());
     const resultado = await verificarAcessoApi(RECURSOS.usuarios);
-    expect(resultado?.status).toBe(403);
-    expect(resultado?.body.ok).toBe(false);
+    expect(resultado.ok).toBe(false);
+    if (!resultado.ok) {
+      expect(resultado.status).toBe(403);
+      expect(resultado.body.ok).toBe(false);
+    }
   });
 
-  it("retorna null (libera) quando autenticado e autorizado", async () => {
+  it("retorna ok:true com o usuário quando autenticado e autorizado (a rota de exportação precisa do usuário para calcular o escopo)", async () => {
     cookieAtual = criarTokenSessao(2);
     usuarioFindUniqueMock.mockResolvedValue(usuarioTecnico());
     const resultado = await verificarAcessoApi(RECURSOS.exportacoes);
-    expect(resultado).toBeNull();
+    expect(resultado.ok).toBe(true);
+    if (resultado.ok) {
+      expect(resultado.usuario.id).toBe(2);
+      expect(resultado.usuario.perfil).toBe("TECNICO");
+    }
   });
 
   it("mensagens de erro não vazam detalhe interno (caminho de arquivo, stack trace, quebras de linha)", async () => {
     cookieAtual = undefined;
     const resultado = await verificarAcessoApi(RECURSOS.usuarios);
-    const mensagem = resultado?.body.error ?? "";
+    const mensagem = !resultado.ok ? resultado.body.error : "";
     expect(mensagem).not.toMatch(/lib\/|\.ts:|node_modules|\bat \w|\n/);
   });
 });

@@ -82,6 +82,13 @@ model Usuario {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  // Atendimentos de Suporte cujo responsável é esta conta de login — ver
+  // SupportTicket.usuarioResponsavelId (missão "Controle de visualização e
+  // exportação por perfil"). É o vínculo real usado para restringir o que um
+  // TECNICO pode ver/editar/exportar; nunca o texto solto de
+  // `tecnicoResponsavel`.
+  atendimentosResponsavel SupportTicket[]
+
   @@map("usuarios")
 }
 
@@ -253,15 +260,34 @@ model SupportTicket {
   resultado          String
   status             String  @default("Aberto")
   observacoes        String?
+  // Texto livre digitado no formulário (nome de quem atendeu) — histórico e
+  // exibição apenas. NUNCA usar este campo para controle de acesso: não é
+  // FK, pode repetir entre pessoas diferentes, ter erro de digitação, ou não
+  // corresponder a nenhuma conta de login. Ver usuarioResponsavelId abaixo.
   tecnicoResponsavel String?
+
+  // Vínculo real com a conta de login (Usuario) responsável pelo
+  // atendimento — missão "Controle de visualização e exportação por
+  // perfil". Opcional e adicionado via ADD COLUMN nullable (migration
+  // 20260722180000_add_usuario_responsavel_suporte): atendimentos
+  // registrados antes desta migration ficam com NULL aqui (decisão
+  // explícita do usuário do sistema — não há como saber com certeza a quem
+  // pertencem só pelo texto de `tecnicoResponsavel`), e por isso só ficam
+  // visíveis para ADMIN até serem reclassificados. Preenchido
+  // automaticamente pela Server Action de criação a partir da sessão
+  // autenticada (nunca aceito como campo de formulário) e nunca alterado na
+  // edição — a "propriedade" de um atendimento é fixada na criação.
+  usuarioResponsavelId Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  colaborador Colaborador? @relation(fields: [colaboradorId], references: [id], onDelete: SetNull)
+  colaborador         Colaborador? @relation(fields: [colaboradorId], references: [id], onDelete: SetNull)
+  usuarioResponsavel  Usuario?     @relation(fields: [usuarioResponsavelId], references: [id], onDelete: SetNull)
 
   @@index([colaboradorId])
   @@index([status])
   @@index([categoria])
+  @@index([usuarioResponsavelId])
   @@map("support_tickets")
 }

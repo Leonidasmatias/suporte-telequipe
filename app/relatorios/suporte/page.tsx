@@ -9,7 +9,7 @@ import {
   RESULTADOS_SUPORTE,
   type FiltrosSuporte,
 } from "@/lib/suporte";
-import { RECURSOS, requireAccess } from "@/lib/autorizacao";
+import { RECURSOS, requireAccess, criarFiltroDeAcessoAtendimentos } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,12 @@ function primeiro(valor: string | string[] | undefined): string {
  * aqui para montar o relatório filtrado.
  */
 export default async function RelatorioSuportePage({ searchParams }: { searchParams: SearchParams }) {
-  await requireAccess(RECURSOS.relatorios);
+  const usuario = await requireAccess(RECURSOS.relatorios);
+  const ehAdmin = usuario.perfil === "ADMIN";
+  // Mesmo escopo de acesso usado na listagem/detalhes/exportação — os
+  // totais, agrupamentos e indicadores abaixo consideram só os atendimentos
+  // do TECNICO logado (ver lib/autorizacao.ts).
+  const escopo = criarFiltroDeAcessoAtendimentos(usuario);
   const filtros: FiltrosSuporte = {
     dataInicio: primeiro(searchParams.data_inicio) || undefined,
     dataFim: primeiro(searchParams.data_fim) || undefined,
@@ -43,12 +48,15 @@ export default async function RelatorioSuportePage({ searchParams }: { searchPar
 
   const [colaboradores, indicadores, ticketsRaw] = await Promise.all([
     prisma.colaborador.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
-    getIndicadoresSuporte(filtros),
+    getIndicadoresSuporte(filtros, escopo),
     prisma.supportTicket.findMany({
       where: {
-        ...buildWhereSuporte(filtros),
-        ...(resultadoFiltro ? { resultado: resultadoFiltro } : {}),
-        ...(clienteFiltro ? { cliente: { contains: clienteFiltro, mode: "insensitive" } } : {}),
+        AND: [
+          escopo,
+          buildWhereSuporte(filtros),
+          ...(resultadoFiltro ? [{ resultado: resultadoFiltro }] : []),
+          ...(clienteFiltro ? [{ cliente: { contains: clienteFiltro, mode: "insensitive" as const } }] : []),
+        ],
       },
       include: { colaborador: true },
       orderBy: { dataAtendimento: "desc" },
@@ -84,6 +92,10 @@ export default async function RelatorioSuportePage({ searchParams }: { searchPar
           </div>
         }
       />
+
+      {!ehAdmin && (
+        <p className="mb-4 -mt-2 text-xs text-graphite-500">Visualizando somente seus atendimentos.</p>
+      )}
 
       <div className="card">
         <h2 className="mb-4 text-base font-semibold text-white">Filtros</h2>
