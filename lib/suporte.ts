@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { obterRotuloCategoriaExibicao } from "@/lib/categoriasSuporte";
 
 /**
  * Motor de indicadores da CENTRAL DE SUPORTE TÉCNICO.
@@ -171,6 +172,9 @@ export type FiltrosSuporte = {
   colaboradorId?: number;
   projeto?: string;
   categoria?: string;
+  categoriaPrincipal?: string;
+  subcategoria?: string;
+  detalhamento?: string;
   status?: string;
   tecnico?: string;
   site?: string;
@@ -196,6 +200,37 @@ export function buildWhereSuporte(filtros: FiltrosSuporte): Prisma.SupportTicket
   if (filtros.colaboradorId) and.push({ colaboradorId: filtros.colaboradorId });
   if (filtros.projeto) and.push({ projeto: { contains: filtros.projeto, mode: "insensitive" } });
   if (filtros.categoria) and.push({ categoria: filtros.categoria });
+
+  // Classificação hierárquica: um atendimento novo é encontrado pelo campo
+  // estruturado correspondente; um atendimento antigo (só com `categoria`
+  // legado) é encontrado por busca textual (contains, case-insensitive) no
+  // mesmo termo — assim o filtro funciona igual para os dois tipos de
+  // registro, sem exigir que o usuário saiba se o atendimento é antigo ou novo.
+  if (filtros.categoriaPrincipal) {
+    and.push({
+      OR: [
+        { categoriaPrincipal: filtros.categoriaPrincipal },
+        { categoria: { contains: filtros.categoriaPrincipal, mode: "insensitive" } },
+      ],
+    });
+  }
+  if (filtros.subcategoria) {
+    and.push({
+      OR: [
+        { subcategoria: filtros.subcategoria },
+        { categoria: { contains: filtros.subcategoria, mode: "insensitive" } },
+      ],
+    });
+  }
+  if (filtros.detalhamento) {
+    and.push({
+      OR: [
+        { detalhamento: filtros.detalhamento },
+        { categoria: { contains: filtros.detalhamento, mode: "insensitive" } },
+      ],
+    });
+  }
+
   if (filtros.status) and.push({ status: filtros.status });
   if (filtros.tecnico) {
     and.push({ tecnicoResponsavel: { contains: filtros.tecnico, mode: "insensitive" } });
@@ -333,6 +368,11 @@ export type TicketResumo = {
   colaboradorNome: string | null;
   projeto: string | null;
   categoria: string;
+  categoriaPrincipal: string | null;
+  subcategoria: string | null;
+  detalhamento: string | null;
+  /** Texto pronto para exibição: hierárquico se disponível, senão o `categoria` legado. */
+  categoriaExibicao: string;
   tempoAtendimento: number | null;
   resultado: string;
   status: string;
@@ -353,6 +393,10 @@ export async function getUltimosAtendimentos(limite = 5): Promise<TicketResumo[]
     colaboradorNome: t.colaborador?.nome ?? null,
     projeto: t.projeto,
     categoria: t.categoria,
+    categoriaPrincipal: t.categoriaPrincipal,
+    subcategoria: t.subcategoria,
+    detalhamento: t.detalhamento,
+    categoriaExibicao: obterRotuloCategoriaExibicao(t),
     tempoAtendimento: t.tempoAtendimento,
     resultado: t.resultado,
     status: t.status,

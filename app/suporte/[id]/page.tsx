@@ -2,8 +2,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import TempoAtendimentoInputs from "@/components/TempoAtendimentoInputs";
+import SeletorCategoriaSuporte from "@/components/SeletorCategoriaSuporte";
 import { updateTicket, closeTicket, deleteTicket } from "../actions";
-import { TIPOS_ATENDIMENTO, CATEGORIAS_SUPORTE, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
+import { TIPOS_ATENDIMENTO, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
 import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
@@ -114,20 +115,12 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className="label-field">Tipo de atendimento</label>
             <select name="tipo_atendimento" required className="input-field" defaultValue={ticket.tipoAtendimento}>
               {TIPOS_ATENDIMENTO.map((t) => (
                 <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label-field">Categoria</label>
-            <select name="categoria" required className="input-field" defaultValue={ticket.categoria}>
-              {CATEGORIAS_SUPORTE.map((c) => (
-                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>
@@ -147,6 +140,25 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
               ))}
             </select>
           </div>
+        </div>
+
+        <div>
+          <p className="label-field mb-1">Categoria do atendimento</p>
+          {!ticket.categoriaPrincipal && (
+            <div className="mb-3 rounded-lg border border-amber-700/40 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-200">
+              <span className="font-semibold">Categoria legada:</span> {ticket.categoria}
+              <p className="mt-1 text-xs text-amber-200/70">
+                Este atendimento foi registrado antes da classificação hierárquica existir. O valor acima é
+                preservado e continua sendo exibido normalmente. Para reclassificar, selecione uma Categoria
+                Principal abaixo e salve — caso contrário, esta categoria legada permanece inalterada.
+              </p>
+            </div>
+          )}
+          <SeletorCategoriaSuporte
+            categoriaPrincipalDefault={ticket.categoriaPrincipal ?? ""}
+            subcategoriaDefault={ticket.subcategoria ?? ""}
+            detalhamentoDefault={ticket.detalhamento ?? ""}
+          />
         </div>
 
         <div>

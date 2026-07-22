@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import TempoAtendimentoInputs from "@/components/TempoAtendimentoInputs";
+import SeletorCategoriaSuporte from "@/components/SeletorCategoriaSuporte";
 import { createTicket } from "../actions";
-import { TIPOS_ATENDIMENTO, CATEGORIAS_SUPORTE, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
+import { TIPOS_ATENDIMENTO, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
 import { RECURSOS, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
@@ -62,22 +63,13 @@ export default async function NovoAtendimentoPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className="label-field">Tipo de atendimento</label>
             <select name="tipo_atendimento" required className="input-field" defaultValue="">
               <option value="" disabled>Selecione</option>
               {TIPOS_ATENDIMENTO.map((t) => (
                 <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label-field">Categoria</label>
-            <select name="categoria" required className="input-field" defaultValue="">
-              <option value="" disabled>Selecione</option>
-              {CATEGORIAS_SUPORTE.map((c) => (
-                <option key={c} value={c}>{c}</option>
               ))}
             </select>
           </div>
@@ -98,6 +90,11 @@ export default async function NovoAtendimentoPage() {
               ))}
             </select>
           </div>
+        </div>
+
+        <div>
+          <p className="label-field mb-1">Categoria do atendimento</p>
+          <SeletorCategoriaSuporte obrigatorio />
         </div>
 
         <div>

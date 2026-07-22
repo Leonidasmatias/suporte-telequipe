@@ -41,6 +41,9 @@ function ticket(overrides: Partial<AtendimentoParaExportacao> = {}): Atendimento
     site: "SN-AQDIK4",
     cliente: "Cliente Alfa Telecom",
     categoria: "MOS",
+    categoriaPrincipal: null,
+    subcategoria: null,
+    detalhamento: null,
     descricaoProblema: "Falha de sinal",
     tecnicoResponsavel: "Maria Souza",
     solucaoAplicada: "Reset de configuração",
@@ -402,7 +405,9 @@ describe("coluna SITE na exportação Excel", () => {
       "Projeto",
       "Site",
       "Cliente",
-      "Categoria",
+      "Categoria Principal",
+      "Subcategoria",
+      "Detalhamento",
       "Descrição",
       "Técnico responsável",
       "Solução aplicada",
@@ -452,5 +457,96 @@ describe("coluna SITE na exportação Excel", () => {
     expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Site") + 1).value).toBe("");
     expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Projeto") + 1).value).toBe("Projeto Alfa");
     expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Cliente") + 1).value).toBe("Cliente Alfa Telecom");
+  });
+});
+
+describe("validarFiltrosExportacao — exportação por categoria hierárquica", () => {
+  it("aceita e sanitiza os 3 níveis de filtro de categoria", () => {
+    const { filtros, erros } = validarFiltrosExportacao(
+      params({ categoria_principal: "3 - ATIVAÇÃO", subcategoria: "B - ALARMES", detalhamento: "B2 - TESTE FÍSICO" })
+    );
+    expect(erros).toHaveLength(0);
+    expect(filtros.categoriaPrincipal).toBe("3 - ATIVAÇÃO");
+    expect(filtros.subcategoria).toBe("B - ALARMES");
+    expect(filtros.detalhamento).toBe("B2 - TESTE FÍSICO");
+  });
+
+  it("o where do Prisma reflete o filtro de Categoria Principal (estruturado + legado, case-insensitive)", () => {
+    const { filtros } = validarFiltrosExportacao(params({ categoria_principal: "3 - ATIVAÇÃO" }));
+    const where = buildWhereSuporte(filtros);
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("3 - ATIVAÇÃO");
+    expect(texto).toContain("insensitive");
+  });
+});
+
+describe("colunas de categoria hierárquica (Categoria Principal / Subcategoria / Detalhamento) na exportação Excel", () => {
+  it("substitui a antiga coluna única 'Categoria' por 3 colunas, na mesma posição, sem remover nenhuma outra coluna", () => {
+    expect(COLUNAS_ATENDIMENTOS).toContain("Categoria Principal");
+    expect(COLUNAS_ATENDIMENTOS).toContain("Subcategoria");
+    expect(COLUNAS_ATENDIMENTOS).toContain("Detalhamento");
+    expect(COLUNAS_ATENDIMENTOS).not.toContain("Categoria");
+    // Mesma posição da antiga coluna "Categoria": logo depois de "Cliente".
+    const idxCliente = COLUNAS_ATENDIMENTOS.indexOf("Cliente");
+    expect(COLUNAS_ATENDIMENTOS[idxCliente + 1]).toBe("Categoria Principal");
+    expect(COLUNAS_ATENDIMENTOS[idxCliente + 2]).toBe("Subcategoria");
+    expect(COLUNAS_ATENDIMENTOS[idxCliente + 3]).toBe("Detalhamento");
+  });
+
+  it("exportação de um atendimento NOVO (classificação hierárquica completa) preenche os 3 níveis nas 3 colunas", () => {
+    const linha = montarLinhaPlanilha(
+      ticket({
+        categoria: "3 - ATIVAÇÃO > B - ALARMES > B2 - TESTE FÍSICO",
+        categoriaPrincipal: "3 - ATIVAÇÃO",
+        subcategoria: "B - ALARMES",
+        detalhamento: "B2 - TESTE FÍSICO",
+      })
+    );
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal")]).toBe("3 - ATIVAÇÃO");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Subcategoria")]).toBe("B - ALARMES");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Detalhamento")]).toBe("B2 - TESTE FÍSICO");
+  });
+
+  it("exportação de um atendimento ANTIGO (só categoria legada, sem classificação hierárquica) usa o valor legado na coluna Categoria Principal, com Subcategoria/Detalhamento vazios", () => {
+    const linha = montarLinhaPlanilha(
+      ticket({ categoria: "MOS", categoriaPrincipal: null, subcategoria: null, detalhamento: null })
+    );
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal")]).toBe("MOS");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Subcategoria")]).toBe("");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Detalhamento")]).toBe("");
+  });
+
+  it("o arquivo .xlsx real tem as 3 colunas de categoria preenchidas corretamente para um atendimento novo (round-trip)", async () => {
+    const t = ticket({
+      categoria: "1 - MOS > A - APLICATIVOS",
+      categoriaPrincipal: "1 - MOS",
+      subcategoria: "A - APLICATIVOS",
+      detalhamento: null,
+    });
+    const buffer = await gerarWorkbookAtendimentos([t], {}, new Date("2026-01-15T12:00:00Z"));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as Buffer);
+    const aba = wb.getWorksheet("Atendimentos")!;
+    const linhaDado = aba.getRow(3);
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal") + 1).value).toBe("1 - MOS");
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Subcategoria") + 1).value).toBe("A - APLICATIVOS");
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Detalhamento") + 1).value).toBe("");
+  });
+
+  it("o arquivo .xlsx real de um atendimento antigo (legado) preserva as demais colunas normalmente", async () => {
+    const t = ticket({
+      categoria: "SWAP",
+      categoriaPrincipal: null,
+      subcategoria: null,
+      detalhamento: null,
+      projeto: "Projeto Alfa",
+    });
+    const buffer = await gerarWorkbookAtendimentos([t], {}, new Date("2026-01-15T12:00:00Z"));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as unknown as Buffer);
+    const aba = wb.getWorksheet("Atendimentos")!;
+    const linhaDado = aba.getRow(3);
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal") + 1).value).toBe("SWAP");
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Projeto") + 1).value).toBe("Projeto Alfa");
   });
 });

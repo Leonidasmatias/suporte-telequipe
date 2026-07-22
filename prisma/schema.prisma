@@ -226,7 +226,27 @@ model SupportTicket {
   site String?
 
   tipoAtendimento String
-  categoria       String
+  // Campo legado (obrigatório) — mantido por compatibilidade com todos os
+  // atendimentos já registrados. Nunca é apagado. Para atendimentos criados
+  // a partir da classificação hierárquica abaixo, este campo passa a
+  // armazenar o texto formatado ("3 - ATIVAÇÃO > B - ALARMES > B2 - TESTE
+  // FÍSICO" — ver formatarCategoriaHierarquica em lib/categoriasSuporte.ts),
+  // preservando a exibição/pesquisa por texto para quem só conhece este
+  // campo (filtros antigos, exportação, etc).
+  categoria String
+
+  // Classificação hierárquica de até 3 níveis (Categoria Principal →
+  // Subcategoria → Detalhamento), conforme a estrutura oficial em
+  // lib/categoriasSuporte.ts. Todos opcionais e adicionados via ADD COLUMN
+  // nullable (migration 20260722160000_add_categoria_hierarquica) — nenhum
+  // atendimento existente foi alterado; registros antigos simplesmente têm
+  // os três campos como null e continuam identificados só pelo `categoria`
+  // legado ("categoria legada" na interface). Armazenam o rótulo completo
+  // (ex.: "B - ALARMES"), não um código separado — é o mesmo texto que
+  // aparece em toda a interface e no `categoria` formatado acima.
+  categoriaPrincipal String?
+  subcategoria       String?
+  detalhamento       String?
 
   descricaoProblema  String
   solucaoAplicada    String?

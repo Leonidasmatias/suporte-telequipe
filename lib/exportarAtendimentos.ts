@@ -48,7 +48,11 @@ export type AtendimentoParaExportacao = {
   site: string | null;
   /** Coluna "Cliente" do relatório (antes de o campo `site` existir, esta coluna se chamava "Site" e usava este mesmo valor como aproximação — ver histórico da migration `20260722140000_add_site_suporte`). */
   cliente: string | null;
+  /** Campo legado (obrigatório) — sempre preenchido. Usado como fallback nas colunas de categoria para atendimentos antigos sem classificação hierárquica (ver montarLinhaPlanilha). */
   categoria: string;
+  categoriaPrincipal: string | null;
+  subcategoria: string | null;
+  detalhamento: string | null;
   descricaoProblema: string;
   tecnicoResponsavel: string | null;
   solucaoAplicada: string | null;
@@ -147,6 +151,15 @@ export function validarFiltrosExportacao(
 
   const site = textoLivreSeguro(params.get("site"));
   if (site) filtros.site = site;
+
+  const categoriaPrincipal = textoLivreSeguro(params.get("categoria_principal"));
+  if (categoriaPrincipal) filtros.categoriaPrincipal = categoriaPrincipal;
+
+  const subcategoriaFiltro = textoLivreSeguro(params.get("subcategoria"));
+  if (subcategoriaFiltro) filtros.subcategoria = subcategoriaFiltro;
+
+  const detalhamentoFiltro = textoLivreSeguro(params.get("detalhamento"));
+  if (detalhamentoFiltro) filtros.detalhamento = detalhamentoFiltro;
 
   const busca = textoLivreSeguro(params.get("busca"));
   if (busca) filtros.busca = busca;
@@ -331,7 +344,9 @@ export const COLUNAS_ATENDIMENTOS = [
   "Projeto",
   "Site",
   "Cliente",
-  "Categoria",
+  "Categoria Principal",
+  "Subcategoria",
+  "Detalhamento",
   "Descrição",
   "Técnico responsável",
   "Solução aplicada",
@@ -356,6 +371,22 @@ export const COLUNAS_ATENDIMENTOS = [
  * (coluna já existente, só renomeada de "Site" para "Cliente" — mesmo dado
  * de sempre, `t.cliente`, sem nenhuma mudança de valor ou lógica) continua
  * exatamente como era.
+ *
+ * "Categoria Principal" / "Subcategoria" / "Detalhamento" (3 colunas novas,
+ * substituindo a antiga coluna única "Categoria" — decisão da missão
+ * "Categoria hierárquica", já validada: nenhuma coluna existente é
+ * removida da planilha, apenas a representação da categoria passa a ter 3
+ * colunas em vez de 1, na mesma posição). Para atendimentos com
+ * classificação hierárquica, cada coluna recebe o nível correspondente.
+ * Para atendimentos antigos (sem `categoriaPrincipal`), a coluna "Categoria
+ * Principal" recebe o valor legado (`categoria`) — a opção de menor impacto
+ * entre as duas oferecidas pela missão (colocar o legado em "Categoria
+ * Principal" ou criar uma 4ª coluna "Categoria Legada"), já que evita
+ * acrescentar uma coluna extra só para os registros antigos e mantém a
+ * planilha com exatamente 21 colunas (18 anteriores − 1 "Categoria" + 3
+ * novas + a coluna "Site" já somada na missão anterior). "Subcategoria" e
+ * "Detalhamento" ficam vazios nesse caso (mesmo padrão de célula vazia já
+ * usado para qualquer outro campo opcional ausente).
  */
 export function montarLinhaPlanilha(t: AtendimentoParaExportacao): Array<string | number | Date> {
   const finalizado = t.status === "Finalizado";
@@ -371,7 +402,9 @@ export function montarLinhaPlanilha(t: AtendimentoParaExportacao): Array<string 
     sanitizarCelulaTexto(t.projeto),
     sanitizarCelulaTexto(t.site),
     sanitizarCelulaTexto(t.cliente),
-    sanitizarCelulaTexto(t.categoria),
+    sanitizarCelulaTexto(t.categoriaPrincipal || t.categoria),
+    sanitizarCelulaTexto(t.subcategoria),
+    sanitizarCelulaTexto(t.detalhamento),
     sanitizarCelulaTexto(t.descricaoProblema),
     sanitizarCelulaTexto(t.tecnicoResponsavel),
     sanitizarCelulaTexto(t.solucaoAplicada),
@@ -398,7 +431,9 @@ const LARGURAS_COLUNAS: Record<(typeof COLUNAS_ATENDIMENTOS)[number], number> = 
   Projeto: 20,
   Site: 20,
   Cliente: 20,
-  Categoria: 16,
+  "Categoria Principal": 22,
+  Subcategoria: 24,
+  Detalhamento: 24,
   Descrição: 42,
   "Técnico responsável": 22,
   "Solução aplicada": 42,

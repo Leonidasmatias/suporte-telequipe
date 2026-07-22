@@ -50,6 +50,42 @@ describe("normalizarSite — campo Site do atendimento", () => {
   });
 });
 
+describe("buildWhereSuporte — filtro por classificação hierárquica de categoria", () => {
+  it("filtro por Categoria Principal aparece no where (busca estruturada)", () => {
+    const where = buildWhereSuporte({ categoriaPrincipal: "3 - ATIVAÇÃO" });
+    expect(JSON.stringify(where)).toContain("3 - ATIVAÇÃO");
+  });
+
+  it("filtro por Categoria Principal também inclui a busca textual no campo legado `categoria` (compatibilidade com registros antigos)", () => {
+    const where = buildWhereSuporte({ categoriaPrincipal: "3 - ATIVAÇÃO" });
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("categoriaPrincipal");
+    expect(texto).toContain("insensitive");
+  });
+
+  it("filtro por Subcategoria aparece no where", () => {
+    const where = buildWhereSuporte({ subcategoria: "B - ALARMES" });
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("B - ALARMES");
+    expect(texto).toContain("subcategoria");
+  });
+
+  it("filtro por Detalhamento aparece no where", () => {
+    const where = buildWhereSuporte({ detalhamento: "B2 - TESTE FÍSICO" });
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("B2 - TESTE FÍSICO");
+    expect(texto).toContain("detalhamento");
+  });
+
+  it("sem nenhum filtro de categoria hierárquica, o where não inclui essas cláusulas", () => {
+    const where = buildWhereSuporte({});
+    const texto = JSON.stringify(where);
+    expect(texto).not.toContain("categoriaPrincipal");
+    expect(texto).not.toContain("subcategoria");
+    expect(texto).not.toContain("detalhamento");
+  });
+});
+
 describe("buildWhereSuporte — filtro por Site", () => {
   it("busca completa: filtro igual ao site salvo aparece no where (contains, case-insensitive)", () => {
     const where = buildWhereSuporte({ site: "SN-AQDIK4" });

@@ -4,16 +4,17 @@ import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
 import EmptyState from "@/components/EmptyState";
 import ExportarExcelButton from "@/components/ExportarExcelButton";
+import SeletorCategoriaSuporte from "@/components/SeletorCategoriaSuporte";
 import {
   buildWhereSuporte,
   getIndicadoresSuporte,
   getKpisSuporte,
   getUltimosAtendimentos,
   formatarTempo,
-  CATEGORIAS_SUPORTE,
   STATUS_SUPORTE,
   type FiltrosSuporte,
 } from "@/lib/suporte";
+import { obterRotuloCategoriaExibicao } from "@/lib/categoriasSuporte";
 import { ACOES, RECURSOS, canPerform, requireAccess } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,9 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
     colaboradorId: primeiro(searchParams.colaborador_id) ? Number(primeiro(searchParams.colaborador_id)) : undefined,
     projeto: primeiro(searchParams.projeto) || undefined,
     categoria: primeiro(searchParams.categoria) || undefined,
+    categoriaPrincipal: primeiro(searchParams.categoria_principal) || undefined,
+    subcategoria: primeiro(searchParams.subcategoria) || undefined,
+    detalhamento: primeiro(searchParams.detalhamento) || undefined,
     status: primeiro(searchParams.status) || undefined,
     tecnico: primeiro(searchParams.tecnico) || undefined,
     site: primeiro(searchParams.site) || undefined,
@@ -65,6 +69,9 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
       colaborador_id: filtros.colaboradorId ? String(filtros.colaboradorId) : undefined,
       projeto: filtros.projeto,
       categoria: filtros.categoria,
+      categoria_principal: filtros.categoriaPrincipal,
+      subcategoria: filtros.subcategoria,
+      detalhamento: filtros.detalhamento,
       status: filtros.status,
       tecnico: filtros.tecnico,
       site: filtros.site,
@@ -92,6 +99,7 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
     projeto: t.projeto,
     site: t.site,
     categoria: t.categoria,
+    categoriaExibicao: obterRotuloCategoriaExibicao(t),
     tempoAtendimento: t.tempoAtendimento,
     resultado: t.resultado,
     status: t.status,
@@ -148,15 +156,6 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
             <input name="projeto" defaultValue={filtros.projeto} className="input-field" placeholder="Nome do projeto" />
           </div>
           <div>
-            <label className="label-field">Categoria</label>
-            <select name="categoria" defaultValue={filtros.categoria ?? ""} className="input-field">
-              <option value="">Todas</option>
-              {CATEGORIAS_SUPORTE.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </div>
-          <div>
             <label className="label-field">Status</label>
             <select name="status" defaultValue={filtros.status ?? ""} className="input-field">
               <option value="">Todos</option>
@@ -173,6 +172,16 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
             <label className="label-field">Site</label>
             <input name="site" defaultValue={filtros.site} className="input-field" placeholder="Ex.: SN-AQDIK4" />
           </div>
+
+          <div className="sm:col-span-2 lg:col-span-4">
+            <SeletorCategoriaSuporte
+              modoFiltro
+              categoriaPrincipalDefault={filtros.categoriaPrincipal ?? ""}
+              subcategoriaDefault={filtros.subcategoria ?? ""}
+              detalhamentoDefault={filtros.detalhamento ?? ""}
+            />
+          </div>
+
           <div className="sm:col-span-2 lg:col-span-3">
             <label className="label-field">Buscar (colaborador, projeto, categoria ou número)</label>
             <input name="busca" defaultValue={filtros.busca} className="input-field" placeholder="Digite para buscar..." />
@@ -218,7 +227,7 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
                     <td>{t.colaboradorNome || "—"}</td>
                     <td>{t.projeto || "—"}</td>
                     <td>{t.site || "—"}</td>
-                    <td>{t.categoria}</td>
+                    <td>{t.categoriaExibicao}</td>
                     <td className="tabular-nums">{formatarTempo(t.tempoAtendimento)}</td>
                     <td>
                       <span className={`badge ${badgeResultado[t.resultado] ?? "chip-neutral"}`}>
@@ -256,7 +265,7 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
                 >
                   <div>
                     <p className="text-sm font-medium text-graphite-100">
-                      #{t.numero} · {t.categoria}
+                      #{t.numero} · {t.categoriaExibicao}
                     </p>
                     <p className="text-xs text-graphite-500">
                       {t.colaboradorNome ?? "Sem colaborador"} · {t.dataAtendimento}
