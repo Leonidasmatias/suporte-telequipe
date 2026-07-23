@@ -386,13 +386,13 @@ describe("validarFiltrosExportacao — exportação por site", () => {
 });
 
 describe("coluna SITE na exportação Excel", () => {
-  it("todas as colunas anteriores são preservadas, na mesma ordem, mais a nova coluna Site e a renomeação Site→Cliente", () => {
-    // Regressão explícita: a única mudança estrutural desta planilha é a
-    // inserção de "Site" (dado novo, campo SupportTicket.site) logo após
-    // "Projeto", e a coluna que antes se chamava "Site" (mas já mostrava o
-    // campo `cliente`) passou a se chamar "Cliente" — mesma posição, mesmo
-    // dado, só o rótulo mudou para refletir o que ela sempre mostrou.
-    // Nenhuma outra coluna, nome ou posição foi alterada.
+  it("todas as colunas anteriores são preservadas, na mesma ordem (mais a coluna nova 'Projeto (Categoria)' da missão v7.1)", () => {
+    // Regressão explícita: a base desta planilha (Site após Projeto, Site→
+    // Cliente) vem de missões anteriores e continua intacta. A única mudança
+    // desta sprint é a inserção de "Projeto (Categoria)" logo antes de
+    // "Categoria Principal" — nome escolhido de propósito para nunca ser
+    // confundido com a coluna "Projeto" já existente (nome de projeto do
+    // cliente). Nenhuma outra coluna, nome ou posição foi alterada.
     expect(COLUNAS_ATENDIMENTOS).toEqual([
       "Número",
       "Data de abertura",
@@ -405,6 +405,7 @@ describe("coluna SITE na exportação Excel", () => {
       "Projeto",
       "Site",
       "Cliente",
+      "Projeto (Categoria)",
       "Categoria Principal",
       "Subcategoria",
       "Detalhamento",
@@ -460,67 +461,105 @@ describe("coluna SITE na exportação Excel", () => {
   });
 });
 
-describe("validarFiltrosExportacao — exportação por categoria hierárquica", () => {
-  it("aceita e sanitiza os 3 níveis de filtro de categoria", () => {
+describe("validarFiltrosExportacao — exportação por categoria hierárquica (v7.1 — Projeto → Categoria → Subcategoria → Detalhamento)", () => {
+  it("aceita e sanitiza os 4 níveis de filtro de categoria, incluindo o novo nível Projeto", () => {
     const { filtros, erros } = validarFiltrosExportacao(
-      params({ categoria_principal: "3 - ATIVAÇÃO", subcategoria: "B - ALARMES", detalhamento: "B2 - TESTE FÍSICO" })
+      params({
+        categoria_projeto: "NOKIA",
+        categoria_principal: "MOS",
+        subcategoria: "Material",
+        detalhamento: "OK",
+      })
     );
     expect(erros).toHaveLength(0);
-    expect(filtros.categoriaPrincipal).toBe("3 - ATIVAÇÃO");
-    expect(filtros.subcategoria).toBe("B - ALARMES");
-    expect(filtros.detalhamento).toBe("B2 - TESTE FÍSICO");
+    expect(filtros.categoriaProjeto).toBe("NOKIA");
+    expect(filtros.categoriaPrincipal).toBe("MOS");
+    expect(filtros.subcategoria).toBe("Material");
+    expect(filtros.detalhamento).toBe("OK");
+  });
+
+  it("o where do Prisma reflete o filtro de Projeto (estruturado + legado, case-insensitive)", () => {
+    const { filtros } = validarFiltrosExportacao(params({ categoria_projeto: "NOKIA" }));
+    const where = buildWhereSuporte(filtros);
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("NOKIA");
+    expect(texto).toContain("insensitive");
   });
 
   it("o where do Prisma reflete o filtro de Categoria Principal (estruturado + legado, case-insensitive)", () => {
-    const { filtros } = validarFiltrosExportacao(params({ categoria_principal: "3 - ATIVAÇÃO" }));
+    const { filtros } = validarFiltrosExportacao(params({ categoria_principal: "MOS" }));
     const where = buildWhereSuporte(filtros);
     const texto = JSON.stringify(where);
-    expect(texto).toContain("3 - ATIVAÇÃO");
+    expect(texto).toContain("MOS");
     expect(texto).toContain("insensitive");
   });
 });
 
-describe("colunas de categoria hierárquica (Categoria Principal / Subcategoria / Detalhamento) na exportação Excel", () => {
-  it("substitui a antiga coluna única 'Categoria' por 3 colunas, na mesma posição, sem remover nenhuma outra coluna", () => {
+describe("colunas de categoria hierárquica (Projeto (Categoria) / Categoria Principal / Subcategoria / Detalhamento) na exportação Excel", () => {
+  it("a coluna nova 'Projeto (Categoria)' fica logo antes de 'Categoria Principal', sem remover nenhuma outra coluna", () => {
+    expect(COLUNAS_ATENDIMENTOS).toContain("Projeto (Categoria)");
     expect(COLUNAS_ATENDIMENTOS).toContain("Categoria Principal");
     expect(COLUNAS_ATENDIMENTOS).toContain("Subcategoria");
     expect(COLUNAS_ATENDIMENTOS).toContain("Detalhamento");
     expect(COLUNAS_ATENDIMENTOS).not.toContain("Categoria");
-    // Mesma posição da antiga coluna "Categoria": logo depois de "Cliente".
     const idxCliente = COLUNAS_ATENDIMENTOS.indexOf("Cliente");
-    expect(COLUNAS_ATENDIMENTOS[idxCliente + 1]).toBe("Categoria Principal");
-    expect(COLUNAS_ATENDIMENTOS[idxCliente + 2]).toBe("Subcategoria");
-    expect(COLUNAS_ATENDIMENTOS[idxCliente + 3]).toBe("Detalhamento");
+    expect(COLUNAS_ATENDIMENTOS[idxCliente + 1]).toBe("Projeto (Categoria)");
+    expect(COLUNAS_ATENDIMENTOS[idxCliente + 2]).toBe("Categoria Principal");
+    expect(COLUNAS_ATENDIMENTOS[idxCliente + 3]).toBe("Subcategoria");
+    expect(COLUNAS_ATENDIMENTOS[idxCliente + 4]).toBe("Detalhamento");
   });
 
-  it("exportação de um atendimento NOVO (classificação hierárquica completa) preenche os 3 níveis nas 3 colunas", () => {
+  it("exportação de um atendimento NOVO (classificação hierárquica completa, matriz v7.1 atual) preenche os 4 níveis nas 4 colunas", () => {
     const linha = montarLinhaPlanilha(
       ticket({
-        categoria: "3 - ATIVAÇÃO > B - ALARMES > B2 - TESTE FÍSICO",
-        categoriaPrincipal: "3 - ATIVAÇÃO",
-        subcategoria: "B - ALARMES",
-        detalhamento: "B2 - TESTE FÍSICO",
+        categoria: "NOKIA > MOS > Material > OK",
+        categoriaPrincipal: "NOKIA > MOS",
+        subcategoria: "Material",
+        detalhamento: "OK",
       })
     );
-    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal")]).toBe("3 - ATIVAÇÃO");
-    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Subcategoria")]).toBe("B - ALARMES");
-    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Detalhamento")]).toBe("B2 - TESTE FÍSICO");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Projeto (Categoria)")]).toBe("NOKIA");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal")]).toBe("MOS");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Subcategoria")]).toBe("Material");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Detalhamento")]).toBe("OK");
   });
 
-  it("exportação de um atendimento ANTIGO (só categoria legada, sem classificação hierárquica) usa o valor legado na coluna Categoria Principal, com Subcategoria/Detalhamento vazios", () => {
+  it("exportação de um atendimento com só o Projeto escolhido deixa Categoria Principal/Subcategoria/Detalhamento vazios", () => {
+    const linha = montarLinhaPlanilha(
+      ticket({ categoria: "IEZ", categoriaPrincipal: "IEZ", subcategoria: null, detalhamento: null })
+    );
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Projeto (Categoria)")]).toBe("IEZ");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal")]).toBe("");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Subcategoria")]).toBe("");
+  });
+
+  it("exportação de um atendimento ANTIGO (nunca classificado — só categoria legada) deixa Projeto (Categoria) vazio e usa o valor legado na coluna Categoria Principal", () => {
     const linha = montarLinhaPlanilha(
       ticket({ categoria: "MOS", categoriaPrincipal: null, subcategoria: null, detalhamento: null })
     );
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Projeto (Categoria)")]).toBe("");
     expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal")]).toBe("MOS");
     expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Subcategoria")]).toBe("");
     expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Detalhamento")]).toBe("");
   });
 
-  it("o arquivo .xlsx real tem as 3 colunas de categoria preenchidas corretamente para um atendimento novo (round-trip)", async () => {
+  it("exportação de um atendimento classificado por uma matriz ANTERIOR (sem Projeto, ex.: 'MOS' sozinho da sprint v7.1 anterior) também é tratado como legado: Projeto (Categoria) vazio, valor bruto preservado em Categoria Principal", () => {
+    const linha = montarLinhaPlanilha(
+      ticket({ categoria: "MOS > Material > OK", categoriaPrincipal: "MOS", subcategoria: "Material", detalhamento: "OK" })
+    );
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Projeto (Categoria)")]).toBe("");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal")]).toBe("MOS");
+    // Subcategoria/Detalhamento são colunas simples, não fazem parte da
+    // codificação do Projeto — continuam mostrando o valor bruto salvo.
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Subcategoria")]).toBe("Material");
+    expect(linha[COLUNAS_ATENDIMENTOS.indexOf("Detalhamento")]).toBe("OK");
+  });
+
+  it("o arquivo .xlsx real tem as 4 colunas de categoria preenchidas corretamente para um atendimento novo (round-trip)", async () => {
     const t = ticket({
-      categoria: "1 - MOS > A - APLICATIVOS",
-      categoriaPrincipal: "1 - MOS",
-      subcategoria: "A - APLICATIVOS",
+      categoria: "ZTE > Ativação > Script / XML",
+      categoriaPrincipal: "ZTE > Ativação",
+      subcategoria: "Script / XML",
       detalhamento: null,
     });
     const buffer = await gerarWorkbookAtendimentos([t], {}, new Date("2026-01-15T12:00:00Z"));
@@ -528,8 +567,9 @@ describe("colunas de categoria hierárquica (Categoria Principal / Subcategoria 
     await wb.xlsx.load(buffer as unknown as Buffer);
     const aba = wb.getWorksheet("Atendimentos")!;
     const linhaDado = aba.getRow(3);
-    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal") + 1).value).toBe("1 - MOS");
-    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Subcategoria") + 1).value).toBe("A - APLICATIVOS");
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Projeto (Categoria)") + 1).value).toBe("ZTE");
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal") + 1).value).toBe("Ativação");
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Subcategoria") + 1).value).toBe("Script / XML");
     expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Detalhamento") + 1).value).toBe("");
   });
 
@@ -546,6 +586,7 @@ describe("colunas de categoria hierárquica (Categoria Principal / Subcategoria 
     await wb.xlsx.load(buffer as unknown as Buffer);
     const aba = wb.getWorksheet("Atendimentos")!;
     const linhaDado = aba.getRow(3);
+    expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Projeto (Categoria)") + 1).value).toBe("");
     expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Categoria Principal") + 1).value).toBe("SWAP");
     expect(linhaDado.getCell(COLUNAS_ATENDIMENTOS.indexOf("Projeto") + 1).value).toBe("Projeto Alfa");
   });

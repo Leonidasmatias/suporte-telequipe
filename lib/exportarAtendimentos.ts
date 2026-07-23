@@ -4,6 +4,7 @@ import {
   STATUS_SUPORTE,
   type FiltrosSuporte,
 } from "@/lib/suporte";
+import { interpretarCategoriaPrincipalPersistida } from "@/lib/categoriasSuporte";
 
 /**
  * Exportação em Excel (.xlsx) da tela /suporte ("Suporte Técnico").
@@ -151,6 +152,9 @@ export function validarFiltrosExportacao(
 
   const site = textoLivreSeguro(params.get("site"));
   if (site) filtros.site = site;
+
+  const categoriaProjeto = textoLivreSeguro(params.get("categoria_projeto"));
+  if (categoriaProjeto) filtros.categoriaProjeto = categoriaProjeto;
 
   const categoriaPrincipal = textoLivreSeguro(params.get("categoria_principal"));
   if (categoriaPrincipal) filtros.categoriaPrincipal = categoriaPrincipal;
@@ -344,6 +348,7 @@ export const COLUNAS_ATENDIMENTOS = [
   "Projeto",
   "Site",
   "Cliente",
+  "Projeto (Categoria)",
   "Categoria Principal",
   "Subcategoria",
   "Detalhamento",
@@ -372,24 +377,34 @@ export const COLUNAS_ATENDIMENTOS = [
  * de sempre, `t.cliente`, sem nenhuma mudança de valor ou lógica) continua
  * exatamente como era.
  *
- * "Categoria Principal" / "Subcategoria" / "Detalhamento" (3 colunas novas,
- * substituindo a antiga coluna única "Categoria" — decisão da missão
- * "Categoria hierárquica", já validada: nenhuma coluna existente é
- * removida da planilha, apenas a representação da categoria passa a ter 3
- * colunas em vez de 1, na mesma posição). Para atendimentos com
- * classificação hierárquica, cada coluna recebe o nível correspondente.
- * Para atendimentos antigos (sem `categoriaPrincipal`), a coluna "Categoria
- * Principal" recebe o valor legado (`categoria`) — a opção de menor impacto
- * entre as duas oferecidas pela missão (colocar o legado em "Categoria
- * Principal" ou criar uma 4ª coluna "Categoria Legada"), já que evita
- * acrescentar uma coluna extra só para os registros antigos e mantém a
- * planilha com exatamente 21 colunas (18 anteriores − 1 "Categoria" + 3
- * novas + a coluna "Site" já somada na missão anterior). "Subcategoria" e
- * "Detalhamento" ficam vazios nesse caso (mesmo padrão de célula vazia já
- * usado para qualquer outro campo opcional ausente).
+ * "Projeto (Categoria)" / "Categoria Principal" / "Subcategoria" /
+ * "Detalhamento" (4 colunas, substituindo a antiga coluna única "Categoria"
+ * — decisão já validada em missões anteriores: nenhuma coluna existente é
+ * removida da planilha, apenas a representação da categoria ganha mais
+ * colunas, na mesma posição). "Projeto (Categoria)" é a NOVA missão v7.1: o
+ * topo da hierarquia (IEZ/ERICSSON/HUAWEI/NOKIA/ZTE) — nome escolhido de
+ * propósito para nunca ser confundido com a coluna "Projeto" já existente
+ * (nome de projeto do cliente, texto livre, campo `SupportTicket.projeto`).
+ *
+ * Como a tabela não tem uma coluna dedicada para esse "Projeto" novo, ele é
+ * decodificado a partir da própria coluna `categoriaPrincipal` (ver
+ * `interpretarCategoriaPrincipalPersistida` em lib/categoriasSuporte.ts):
+ *  - Quando decodificável (atendimento novo, classificado pela matriz
+ *    atual): "Projeto (Categoria)" recebe o Projeto decodificado e
+ *    "Categoria Principal" recebe a Categoria Principal decodificada (ou
+ *    fica vazia, se só o Projeto tiver sido escolhido).
+ *  - Quando NÃO decodificável (atendimento nunca classificado, ou
+ *    classificado por uma matriz anterior — sem o conceito de Projeto):
+ *    "Projeto (Categoria)" fica vazia e "Categoria Principal" recebe o valor
+ *    legado (`categoriaPrincipal` bruto se existir, senão `categoria`) —
+ *    mesmo comportamento de fallback já usado antes desta missão, preservado
+ *    sem alteração para não mexer no histórico. "Subcategoria" e
+ *    "Detalhamento" ficam vazios nesse caso (mesmo padrão de célula vazia já
+ *    usado para qualquer outro campo opcional ausente).
  */
 export function montarLinhaPlanilha(t: AtendimentoParaExportacao): Array<string | number | Date> {
   const finalizado = t.status === "Finalizado";
+  const decodificado = interpretarCategoriaPrincipalPersistida(t.categoriaPrincipal);
   return [
     t.numero,
     t.dataAtendimento,
@@ -402,7 +417,8 @@ export function montarLinhaPlanilha(t: AtendimentoParaExportacao): Array<string 
     sanitizarCelulaTexto(t.projeto),
     sanitizarCelulaTexto(t.site),
     sanitizarCelulaTexto(t.cliente),
-    sanitizarCelulaTexto(t.categoriaPrincipal || t.categoria),
+    sanitizarCelulaTexto(decodificado?.projeto ?? ""),
+    sanitizarCelulaTexto(decodificado ? decodificado.categoriaPrincipal ?? "" : t.categoriaPrincipal || t.categoria),
     sanitizarCelulaTexto(t.subcategoria),
     sanitizarCelulaTexto(t.detalhamento),
     sanitizarCelulaTexto(t.descricaoProblema),
@@ -431,6 +447,7 @@ const LARGURAS_COLUNAS: Record<(typeof COLUNAS_ATENDIMENTOS)[number], number> = 
   Projeto: 20,
   Site: 20,
   Cliente: 20,
+  "Projeto (Categoria)": 20,
   "Categoria Principal": 22,
   Subcategoria: 24,
   Detalhamento: 24,

@@ -5,6 +5,7 @@ import TempoAtendimentoInputs from "@/components/TempoAtendimentoInputs";
 import SeletorCategoriaSuporte from "@/components/SeletorCategoriaSuporte";
 import { updateTicket, closeTicket, deleteTicket } from "../actions";
 import { TIPOS_ATENDIMENTO, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
+import { obterClassificacaoAtualValida } from "@/lib/categoriasSuporte";
 import { ACOES, RECURSOS, canPerform, requireAccess, criarFiltroDeAcessoAtendimentos } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,20 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
   });
 
   const dataAtendimentoValue = ticket.dataAtendimento.toISOString().slice(0, 10);
+
+  // Missão v7.1 (revisão da matriz hierárquica — Projeto → Categoria
+  // Principal → Subcategoria → Detalhamento): um atendimento pode ter
+  // `categoriaPrincipal` preenchido com um valor que não é decodificável
+  // contra a matriz ATUAL — nunca classificado, classificado por uma matriz
+  // anterior (3 níveis, sem Projeto, ex.: "MOS" sozinho), ou por qualquer
+  // formato ainda mais antigo (ex.: "3 - ATIVAÇÃO"). Em todos esses casos o
+  // tratamento na tela é o mesmo: mostrar o valor salvo como legado, sem
+  // tentar pré-selecionar nada no seletor novo (que só lista Projetos/
+  // Categorias da matriz atual) e sem alterar nada no banco. Editar sem
+  // tocar no seletor preserva esse valor legado intacto (ver updateTicket em
+  // app/suporte/actions.ts).
+  const classificacaoAtual = obterClassificacaoAtualValida(ticket);
+  const categoriaAtualValida = classificacaoAtual !== null;
 
   return (
     <div>
@@ -150,20 +165,23 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
 
         <div>
           <p className="label-field mb-1">Categoria do atendimento</p>
-          {!ticket.categoriaPrincipal && (
+          {!categoriaAtualValida && (
             <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               <span className="font-semibold">Categoria legada:</span> {ticket.categoria}
               <p className="mt-1 text-xs text-amber-700/80">
-                Este atendimento foi registrado antes da classificação hierárquica existir. O valor acima é
-                preservado e continua sendo exibido normalmente. Para reclassificar, selecione uma Categoria
-                Principal abaixo e salve — caso contrário, esta categoria legada permanece inalterada.
+                {ticket.categoriaPrincipal
+                  ? "Este atendimento foi classificado em uma estrutura de categorias anterior, que foi substituída. O valor acima é preservado e continua sendo exibido normalmente."
+                  : "Este atendimento foi registrado antes da classificação hierárquica existir. O valor acima é preservado e continua sendo exibido normalmente."}{" "}
+                Para reclassificar, selecione uma Categoria Principal abaixo e salve — caso contrário, esta
+                categoria legada permanece inalterada.
               </p>
             </div>
           )}
           <SeletorCategoriaSuporte
-            categoriaPrincipalDefault={ticket.categoriaPrincipal ?? ""}
-            subcategoriaDefault={ticket.subcategoria ?? ""}
-            detalhamentoDefault={ticket.detalhamento ?? ""}
+            projetoDefault={classificacaoAtual?.projeto ?? ""}
+            categoriaPrincipalDefault={classificacaoAtual?.categoriaPrincipal ?? ""}
+            subcategoriaDefault={classificacaoAtual?.subcategoria ?? ""}
+            detalhamentoDefault={classificacaoAtual?.detalhamento ?? ""}
           />
         </div>
 

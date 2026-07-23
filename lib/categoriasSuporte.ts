@@ -1,197 +1,236 @@
 /**
  * Fonte única da classificação hierárquica de atendimentos da Central de
- * Suporte Técnico (até 3 níveis: Categoria Principal → Subcategoria →
- * Detalhamento), conforme a estrutura oficial definida pelo time. Nenhum
- * outro arquivo deve duplicar esta lista — formulário de criação, edição,
- * listagem, filtros, exportação e testes importam tudo daqui.
+ * Suporte Técnico. Nenhum outro arquivo deve duplicar esta lista —
+ * formulário de criação, edição, listagem, filtros, exportação e relatórios
+ * importam tudo daqui (direta ou indiretamente, via `obterRotuloCategoriaExibicao`/
+ * `formatarCategoriaHierarquica`/`obterClassificacaoAtualValida`).
  *
- * Os rótulos completos (ex.: "3 - ATIVAÇÃO", "B - ALARMES", "B2 - TESTE
- * FÍSICO") são os valores literais salvos em `SupportTicket.categoriaPrincipal`
- * / `subcategoria` / `detalhamento` — não um código separado — porque é
- * assim que o texto formatado precisa aparecer em `categoria` (campo legado,
- * ver `formatarCategoriaHierarquica`) e em toda a interface, sem uma camada
- * extra de tradução código→rótulo.
+ * MISSÃO "TELEQUIPE SUPORTE STA v7.1 — Revisão da Matriz Hierárquica": esta é
+ * a nova arquitetura OFICIAL, que substitui COMPLETAMENTE a matriz anterior
+ * (3 níveis: Categoria Principal → Subcategoria → Detalhamento, sem conceito
+ * de Projeto). A matriz anterior foi inteiramente descartada — nenhuma
+ * função, tipo ou dado dela permanece neste arquivo.
+ *
+ * MISSÃO "TELEQUIPE SUPORTE STA v7.1 — Correção da Matriz — IEZ deve
+ * replicar os demais projetos": a primeira versão desta revisão tinha dado
+ * ao Projeto "IEZ" uma estrutura EXCLUSIVA ("Dia de Integração" com 7
+ * subcategorias próprias) — essa estrutura exclusiva foi COMPLETAMENTE
+ * DESCARTADA. Os 5 projetos (ERICSSON, HUAWEI, NOKIA, ZTE, IEZ) agora
+ * compartilham EXATAMENTE a mesma matriz operacional de Categorias
+ * Principais/Subcategorias/Detalhamentos — nenhum deles tem conteúdo
+ * exclusivo. "IEZ" continua sendo uma opção independente no seletor de
+ * Projeto (o nível "Projeto" continua existindo e sendo o topo da
+ * hierarquia); a única mudança é que ele agora aponta para a MESMA
+ * referência de categorias que os outros 4, em vez de ter a sua própria.
+ *
+ * NOVA HIERARQUIA (4 níveis): Projeto → Categoria Principal → Subcategoria →
+ * Detalhamento.
+ *  - Os 5 Projetos (ERICSSON, HUAWEI, NOKIA, ZTE, IEZ) compartilham
+ *    EXATAMENTE a mesma estrutura de Categorias Principais (MOS,
+ *    Infraestrutura, Instalação, Ativação, Aceitação) — centralizada em
+ *    `CATEGORIAS_PROJETO_DE_CAMPO` abaixo (todos os 5 apontam para a MESMA
+ *    referência de array, nunca uma cópia) para nunca duplicar a matriz 5
+ *    vezes e facilitar a inclusão de novos projetos/categorias no futuro.
+ *
+ * PERSISTÊNCIA SEM ALTERAR O SCHEMA (regra explícita da missão: "Não criar
+ * migrations. Não alterar Prisma/Schema. Reutilizar a estrutura já
+ * existente"): a tabela `SupportTicket` só tem 3 colunas estruturadas
+ * (`categoriaPrincipal`, `subcategoria`, `detalhamento`) — não existe uma
+ * coluna dedicada para o novo nível "Projeto". Por isso o Projeto é
+ * codificado DENTRO da própria coluna `categoriaPrincipal`, usando o mesmo
+ * separador " > " já usado em todo o sistema para juntar níveis da
+ * hierarquia:
+ *  - `null`                          → nenhuma classificação nova escolhida.
+ *  - "IEZ"                           → só o Projeto foi escolhido (Categoria
+ *                                      Principal ainda vazia).
+ *  - "NOKIA > MOS"                   → Projeto + Categoria Principal.
+ * `subcategoria`/`detalhamento` continuam colunas simples (bare strings),
+ * sem nenhuma mudança de formato. `combinarProjetoCategoria` (escrita) e
+ * `interpretarCategoriaPrincipalPersistida` (leitura) isolam completamente
+ * essa codificação — nenhum outro arquivo do sistema precisa conhecer o
+ * truque: todos consomem `ClassificacaoSuporte` (objeto lógico de 4 campos)
+ * através das funções públicas deste módulo.
+ *
+ * COMPATIBILIDADE COM ATENDIMENTOS ANTIGOS (regra explícita da missão:
+ * "Os atendimentos antigos NÃO podem ser alterados. Não migrar registros.").
+ * `interpretarCategoriaPrincipalPersistida` só reconhece valores que casam
+ * EXATAMENTE com a matriz atual (um Projeto válido, sozinho ou seguido de
+ * " > " + uma Categoria Principal que pertença a esse Projeto). Qualquer
+ * outra coisa — nunca classificado, categoria "solta" de uma matriz v7.1
+ * anterior (ex.: "MOS" sozinho, sem Projeto), um valor da estrutura
+ * EXCLUSIVA que o Projeto IEZ chegou a ter na primeira versão desta revisão
+ * (ex.: "IEZ > Dia de Integração" — "Dia de Integração" não existe mais como
+ * Categoria Principal de nenhum projeto), ou qualquer valor mais antigo ainda
+ * (ex.: "3 - ATIVAÇÃO") — devolve `null`, e o restante do sistema trata isso
+ * como "categoria legada": exibe o texto já salvo (`categoria`) sem tentar
+ * traduzir, migrar ou pré-selecionar nada no seletor novo. Editar um desses
+ * atendimentos sem mexer no seletor de categoria preserva o valor legado
+ * 100% intacto (ver `updateTicket` em app/suporte/actions.ts).
  *
  * Este módulo não importa nada do Prisma nem do Next — é puro TypeScript,
  * seguro para uso tanto em Server Components/Actions quanto em Client
  * Components (mesmo padrão já usado por `lib/permissoes.ts`).
  */
 
-export type Grupo = "GRUPO GERAL" | "GRUPO NOKIA";
-
-export type NoDetalhamento = {
-  codigo: string;
-  nome: string;
-};
-
 export type NoSubcategoria = {
-  /** Vazio para subcategorias sem código próprio (ex.: "PRESENCIAL", "ON-LINE"). */
-  codigo: string;
   nome: string;
-  detalhamentos: NoDetalhamento[];
+  detalhamentos: string[];
 };
 
 export type NoCategoriaPrincipal = {
-  codigo: string;
   nome: string;
-  grupo: Grupo;
   subcategorias: NoSubcategoria[];
 };
 
-function rotulo(codigo: string, nome: string): string {
-  return codigo ? `${codigo} - ${nome}` : nome;
-}
+export type NoProjeto = {
+  nome: string;
+  categorias: NoCategoriaPrincipal[];
+};
 
-export function rotuloCategoriaPrincipal(c: NoCategoriaPrincipal): string {
-  return rotulo(c.codigo, c.nome);
-}
-
-export function rotuloSubcategoria(s: NoSubcategoria): string {
-  return rotulo(s.codigo, s.nome);
-}
-
-export function rotuloDetalhamento(d: NoDetalhamento): string {
-  return rotulo(d.codigo, d.nome);
-}
+const SEPARADOR = " > ";
 
 /**
- * Estrutura oficial de categorias da Central de Suporte Técnico. Nomes em
- * português e em caixa alta, exatamente conforme definido pelo time — não
- * alterar sem uma nova definição oficial.
+ * Estrutura de Categorias Principais compartilhada por TODOS os 5 projetos
+ * (ERICSSON, HUAWEI, NOKIA, ZTE e, desde a correção desta missão, também
+ * IEZ) — 5 categorias: MOS, Infraestrutura, Instalação, Ativação, Aceitação.
+ * Única fonte reaproveitada pelos 5 projetos (nunca copiada) — para incluir
+ * um projeto novo que utilize esta mesma matriz operacional, basta apontar
+ * `categorias` para esta constante em `MATRIZ_CLASSIFICACAO_SUPORTE` abaixo;
+ * nenhuma duplicação de conteúdo é necessária.
  */
-export const CATEGORIAS_SUPORTE_HIERARQUIA: NoCategoriaPrincipal[] = [
-  // ============================================================
-  // GRUPO GERAL
-  // ============================================================
+const CATEGORIAS_PROJETO_DE_CAMPO: NoCategoriaPrincipal[] = [
   {
-    codigo: "0",
-    nome: "INTEGRAÇÃO",
-    grupo: "GRUPO GERAL",
-    subcategorias: [
-      { codigo: "", nome: "PRESENCIAL", detalhamentos: [] },
-      { codigo: "", nome: "ON-LINE", detalhamentos: [] },
-    ],
-  },
-  { codigo: "A", nome: "TREINAMENTO", grupo: "GRUPO GERAL", subcategorias: [] },
-  { codigo: "B", nome: "USUÁRIO / SENHA / APP", grupo: "GRUPO GERAL", subcategorias: [] },
-  { codigo: "C", nome: "COMPUTADOR / SOFTWARE", grupo: "GRUPO GERAL", subcategorias: [] },
-  { codigo: "D", nome: "CELULAR / APP", grupo: "GRUPO GERAL", subcategorias: [] },
-
-  // ============================================================
-  // GRUPO NOKIA
-  // ============================================================
-  {
-    codigo: "1",
     nome: "MOS",
-    grupo: "GRUPO NOKIA",
     subcategorias: [
-      { codigo: "A", nome: "APLICATIVOS", detalhamentos: [] },
-      { codigo: "B", nome: "ORIENTAÇÃO", detalhamentos: [] },
+      { nome: "Log de Antes", detalhamentos: ["Geral"] },
+      { nome: "EHS", detalhamentos: ["Aplicativos e Orientações"] },
+      { nome: "Logística / Transportadora", detalhamentos: ["Geral"] },
+      { nome: "Material", detalhamentos: ["OK", "NOK"] },
+      { nome: "Aplicativos", detalhamentos: ["Geral"] },
+      { nome: "Orientação", detalhamentos: ["Geral"] },
     ],
   },
   {
-    codigo: "2",
-    nome: "INSTALAÇÃO",
-    grupo: "GRUPO NOKIA",
+    nome: "Infraestrutura",
     subcategorias: [
-      { codigo: "A", nome: "ORIENTAÇÃO SOBRE O PROJETO", detalhamentos: [] },
-      { codigo: "B", nome: "PADRÃO DE INSTALAÇÃO", detalhamentos: [] },
-      { codigo: "C", nome: "HARDWARE", detalhamentos: [] },
+      { nome: "Energia", detalhamentos: ["Configuração", "Alarmes"] },
+      { nome: "TX", detalhamentos: ["TX Operadora NOK", "Alarmes"] },
+      { nome: "Fibra Óptica", detalhamentos: ["Alarmes", "FO NOK"] },
+      {
+        nome: "Sistema Irradiante",
+        detalhamentos: ["Suporte", "Falta de Infraestrutura", "Esteiramento Horizontal / Vertical"],
+      },
+      { nome: "Solo", detalhamentos: ["Gabinete", "Passagem de Cabos / FO"] },
     ],
   },
   {
-    codigo: "3",
-    nome: "ATIVAÇÃO",
-    grupo: "GRUPO NOKIA",
+    nome: "Instalação",
     subcategorias: [
-      { codigo: "A", nome: "CONFIGURAÇÃO", detalhamentos: [] },
-      {
-        codigo: "B",
-        nome: "ALARMES",
-        detalhamentos: [
-          { codigo: "B1", nome: "CONFIGURAÇÃO" },
-          { codigo: "B2", nome: "TESTE FÍSICO" },
-        ],
-      },
-      { codigo: "C", nome: "ATUALIZAÇÃO DE SOFTWARE", detalhamentos: [] },
-      { codigo: "D", nome: "SCRIPT / XML", detalhamentos: [] },
-      { codigo: "E", nome: "ORIENTAÇÃO", detalhamentos: [] },
+      { nome: "Orientação sobre o Projeto", detalhamentos: ["Geral"] },
+      { nome: "Padrão de Instalação", detalhamentos: ["Geral"] },
+      { nome: "Hardware", detalhamentos: ["Avarias", "Falhas"] },
+      { nome: "Ferramentas", detalhamentos: ["Geral"] },
     ],
   },
   {
-    codigo: "4",
-    nome: "INFRAESTRUTURA",
-    grupo: "GRUPO NOKIA",
+    nome: "Ativação",
     subcategorias: [
-      {
-        codigo: "A",
-        nome: "ENERGIA",
-        detalhamentos: [
-          { codigo: "A1", nome: "CONFIGURAÇÃO" },
-          { codigo: "A2", nome: "ALARMES" },
-        ],
-      },
-      {
-        codigo: "B",
-        nome: "TX",
-        detalhamentos: [{ codigo: "B1", nome: "ALARMES" }],
-      },
-      {
-        codigo: "C",
-        nome: "FIBRA ÓPTICA",
-        detalhamentos: [{ codigo: "C1", nome: "ALARMES" }],
-      },
+      { nome: "Configuração", detalhamentos: ["Controladora", "Periféricos", "Energia"] },
+      { nome: "Alarmes", detalhamentos: ["Configuração", "Teste Físico"] },
+      { nome: "Atualização SW", detalhamentos: ["Geral"] },
+      { nome: "Script / XML", detalhamentos: ["Geral"] },
+      { nome: "Orientação", detalhamentos: ["Geral"] },
     ],
   },
   {
-    codigo: "5",
-    nome: "ACEITAÇÃO",
-    grupo: "GRUPO NOKIA",
+    nome: "Aceitação",
     subcategorias: [
-      { codigo: "A", nome: "TESTE DE VOZ / DADOS", detalhamentos: [] },
-      { codigo: "B", nome: "ALARMES / RETIRADA", detalhamentos: [] },
-      { codigo: "C", nome: "DOCUMENTAÇÃO FOTOGRÁFICA", detalhamentos: [] },
+      { nome: "Teste de Voz / Dados", detalhamentos: ["Ericsson", "Vivo"] },
+      { nome: "Alarmes", detalhamentos: ["Retirada"] },
+      { nome: "Documentação / Relatório Fotográfico", detalhamentos: ["QC", "RFA"] },
+      { nome: "RSA Claro", detalhamentos: ["Agendamento de Vídeo"] },
+      { nome: "Log Depois", detalhamentos: ["Geral"] },
     ],
   },
 ];
 
-function encontrarCategoriaPrincipal(rotuloCategoria: string | null | undefined): NoCategoriaPrincipal | undefined {
-  if (!rotuloCategoria) return undefined;
-  return CATEGORIAS_SUPORTE_HIERARQUIA.find((c) => rotuloCategoriaPrincipal(c) === rotuloCategoria);
+/**
+ * Matriz completa oficial (Sprint v7.1 — correção): 5 Projetos, todos
+ * apontando para a MESMA referência de Categorias Principais/Subcategorias/
+ * Detalhamentos (`CATEGORIAS_PROJETO_DE_CAMPO`) — nenhum projeto tem
+ * conteúdo exclusivo. Não alterar sem uma nova definição oficial do time —
+ * para incluir um novo projeto que reutilize esta matriz, basta adicionar
+ * `{ nome: "NOVO_PROJETO", categorias: CATEGORIAS_PROJETO_DE_CAMPO }` aqui;
+ * nenhuma outra tela precisa ser tocada (todas consomem só as funções
+ * abaixo).
+ */
+export const MATRIZ_CLASSIFICACAO_SUPORTE: NoProjeto[] = [
+  { nome: "ERICSSON", categorias: CATEGORIAS_PROJETO_DE_CAMPO },
+  { nome: "HUAWEI", categorias: CATEGORIAS_PROJETO_DE_CAMPO },
+  { nome: "NOKIA", categorias: CATEGORIAS_PROJETO_DE_CAMPO },
+  { nome: "ZTE", categorias: CATEGORIAS_PROJETO_DE_CAMPO },
+  { nome: "IEZ", categorias: CATEGORIAS_PROJETO_DE_CAMPO },
+];
+
+function encontrarProjeto(nomeProjeto: string | null | undefined): NoProjeto | undefined {
+  if (!nomeProjeto) return undefined;
+  return MATRIZ_CLASSIFICACAO_SUPORTE.find((p) => p.nome === nomeProjeto);
+}
+
+function encontrarCategoriaPrincipal(
+  nomeProjeto: string | null | undefined,
+  nomeCategoria: string | null | undefined
+): NoCategoriaPrincipal | undefined {
+  const projeto = encontrarProjeto(nomeProjeto);
+  if (!projeto || !nomeCategoria) return undefined;
+  return projeto.categorias.find((c) => c.nome === nomeCategoria);
 }
 
 function encontrarSubcategoria(
-  rotuloCategoria: string | null | undefined,
-  rotuloSub: string | null | undefined
+  nomeProjeto: string | null | undefined,
+  nomeCategoria: string | null | undefined,
+  nomeSub: string | null | undefined
 ): NoSubcategoria | undefined {
-  const categoria = encontrarCategoriaPrincipal(rotuloCategoria);
-  if (!categoria || !rotuloSub) return undefined;
-  return categoria.subcategorias.find((s) => rotuloSubcategoria(s) === rotuloSub);
+  const categoria = encontrarCategoriaPrincipal(nomeProjeto, nomeCategoria);
+  if (!categoria || !nomeSub) return undefined;
+  return categoria.subcategorias.find((s) => s.nome === nomeSub);
 }
 
-/** Todas as Categorias Principais (rótulo já formatado, ex.: "3 - ATIVAÇÃO"), com o grupo a que pertencem — para agrupar visualmente ("GRUPO GERAL" / "GRUPO NOKIA") no seletor. */
-export function obterCategoriasPrincipais(): { valor: string; grupo: Grupo }[] {
-  return CATEGORIAS_SUPORTE_HIERARQUIA.map((c) => ({ valor: rotuloCategoriaPrincipal(c), grupo: c.grupo }));
+/** Todos os Projetos, na ordem oficial (ERICSSON, HUAWEI, NOKIA, ZTE, IEZ). */
+export function obterProjetos(): string[] {
+  return MATRIZ_CLASSIFICACAO_SUPORTE.map((p) => p.nome);
 }
 
-/** Subcategorias (rótulo já formatado) da Categoria Principal informada. Lista vazia se a categoria não existir ou não tiver subcategorias (ex.: "A - TREINAMENTO"). */
-export function obterSubcategorias(categoriaPrincipal: string | null | undefined): string[] {
-  const categoria = encontrarCategoriaPrincipal(categoriaPrincipal);
+/** Categorias Principais do Projeto informado. Lista vazia se o Projeto não existir ou não estiver informado. */
+export function obterCategoriasPrincipais(projeto: string | null | undefined): string[] {
+  const p = encontrarProjeto(projeto);
+  if (!p) return [];
+  return p.categorias.map((c) => c.nome);
+}
+
+/** Subcategorias da Categoria Principal informada, dentro do Projeto informado. Lista vazia se a combinação não existir. */
+export function obterSubcategorias(
+  projeto: string | null | undefined,
+  categoriaPrincipal: string | null | undefined
+): string[] {
+  const categoria = encontrarCategoriaPrincipal(projeto, categoriaPrincipal);
   if (!categoria) return [];
-  return categoria.subcategorias.map(rotuloSubcategoria);
+  return categoria.subcategorias.map((s) => s.nome);
 }
 
-/** Detalhamentos (rótulo já formatado) da Subcategoria informada, dentro da Categoria Principal informada. Lista vazia se a combinação não existir ou a subcategoria não tiver detalhamentos. */
+/** Detalhamentos da Subcategoria informada, dentro do Projeto/Categoria Principal informados. Lista vazia se a combinação não existir. */
 export function obterDetalhamentos(
+  projeto: string | null | undefined,
   categoriaPrincipal: string | null | undefined,
   subcategoria: string | null | undefined
 ): string[] {
-  const sub = encontrarSubcategoria(categoriaPrincipal, subcategoria);
+  const sub = encontrarSubcategoria(projeto, categoriaPrincipal, subcategoria);
   if (!sub) return [];
-  return sub.detalhamentos.map(rotuloDetalhamento);
+  return sub.detalhamentos.slice();
 }
 
 export type ClassificacaoSuporte = {
+  projeto?: string | null;
   categoriaPrincipal?: string | null;
   subcategoria?: string | null;
   detalhamento?: string | null;
@@ -200,30 +239,48 @@ export type ClassificacaoSuporte = {
 export type ResultadoValidacaoClassificacao = { valido: true } | { valido: false; erro: string };
 
 /**
- * Valida se a combinação Categoria Principal / Subcategoria / Detalhamento é
- * consistente com a estrutura oficial — a mesma checagem usada no servidor
- * (Server Actions) e disponível para os formulários/testes. Sempre roda no
- * servidor antes de salvar; nunca confia apenas na interface.
+ * Valida se a combinação Projeto / Categoria Principal / Subcategoria /
+ * Detalhamento é consistente com a nova matriz oficial v7.1 — a mesma
+ * checagem usada no servidor (Server Actions) e disponível para os
+ * formulários/testes. Sempre roda no servidor antes de salvar; nunca confia
+ * apenas na cascata da interface.
  *
- * Regras:
+ * Regras (hierarquia totalmente obrigatória, sem combinações "soltas"):
+ *  - Tudo vazio é válido — representa "nenhuma classificação nova escolhida"
+ *    (usado ao editar um atendimento legado sem reclassificá-lo).
+ *  - Sem Projeto, nenhum nível abaixo pode estar preenchido.
+ *  - Projeto desconhecido é inválido.
  *  - Sem Categoria Principal, Subcategoria/Detalhamento também devem estar
- *    vazios (não dá para ter um nível 2/3 "solto"). Tudo vazio é válido —
- *    representa "nenhuma classificação nova escolhida" (usado ao editar um
- *    atendimento legado sem reclassificá-lo).
- *  - Categoria Principal desconhecida é inválida.
+ *    vazios.
+ *  - Categoria Principal só é válida se pertencer ao Projeto informado (ex.:
+ *    Projeto "IEZ" + Categoria "Ativação" é inválido — "Ativação" não
+ *    pertence a IEZ, só aos projetos de campo).
  *  - Subcategoria só é válida se pertencer à Categoria Principal informada
- *    (ex.: "3 - ATIVAÇÃO" + "A - ENERGIA" é inválido — ENERGIA pertence a
- *    "4 - INFRAESTRUTURA").
+ *    (dentro do Projeto informado).
  *  - Detalhamento só é válido se pertencer à Subcategoria informada.
- *  - Categoria sem subcategoria (ex.: "A - TREINAMENTO") e subcategoria sem
- *    detalhamento são válidas com o(s) nível(is) seguinte(s) vazio(s).
  */
 export function validarClassificacaoSuporte(
   classificacao: ClassificacaoSuporte
 ): ResultadoValidacaoClassificacao {
+  const projeto = classificacao.projeto || null;
   const categoriaPrincipal = classificacao.categoriaPrincipal || null;
   const subcategoria = classificacao.subcategoria || null;
   const detalhamento = classificacao.detalhamento || null;
+
+  if (!projeto) {
+    if (categoriaPrincipal || subcategoria || detalhamento) {
+      return {
+        valido: false,
+        erro: "Selecione o Projeto antes de escolher Categoria Principal, Subcategoria ou Detalhamento.",
+      };
+    }
+    return { valido: true };
+  }
+
+  const projetoEncontrado = encontrarProjeto(projeto);
+  if (!projetoEncontrado) {
+    return { valido: false, erro: `"${projeto}" não é um Projeto válido.` };
+  }
 
   if (!categoriaPrincipal) {
     if (subcategoria || detalhamento) {
@@ -235,9 +292,12 @@ export function validarClassificacaoSuporte(
     return { valido: true };
   }
 
-  const categoria = encontrarCategoriaPrincipal(categoriaPrincipal);
+  const categoria = projetoEncontrado.categorias.find((c) => c.nome === categoriaPrincipal);
   if (!categoria) {
-    return { valido: false, erro: `"${categoriaPrincipal}" não é uma Categoria Principal válida.` };
+    return {
+      valido: false,
+      erro: `A Categoria Principal "${categoriaPrincipal}" não pertence ao Projeto "${projeto}".`,
+    };
   }
 
   if (!subcategoria) {
@@ -247,7 +307,7 @@ export function validarClassificacaoSuporte(
     return { valido: true };
   }
 
-  const sub = categoria.subcategorias.find((s) => rotuloSubcategoria(s) === subcategoria);
+  const sub = categoria.subcategorias.find((s) => s.nome === subcategoria);
   if (!sub) {
     return {
       valido: false,
@@ -257,8 +317,8 @@ export function validarClassificacaoSuporte(
 
   if (!detalhamento) return { valido: true };
 
-  const det = sub.detalhamentos.find((d) => rotuloDetalhamento(d) === detalhamento);
-  if (!det) {
+  const detalhamentoValido = sub.detalhamentos.includes(detalhamento);
+  if (!detalhamentoValido) {
     return {
       valido: false,
       erro: `O detalhamento "${detalhamento}" não pertence à subcategoria "${subcategoria}".`,
@@ -269,24 +329,85 @@ export function validarClassificacaoSuporte(
 }
 
 /**
- * Junta os níveis preenchidos com " > " (ex.: "3 - ATIVAÇÃO > B - ALARMES >
- * B2 - TESTE FÍSICO"). Níveis vazios são omitidos — "A - TREINAMENTO" sem
- * subcategoria vira só "A - TREINAMENTO". É este texto que é salvo no campo
- * legado `categoria` a cada criação/edição com classificação nova, para
- * manter compatibilidade com qualquer parte antiga do sistema que ainda leia
- * só `categoria`.
+ * Junta os níveis preenchidos com " > " (ex.: "NOKIA > MOS > Material > OK").
+ * Níveis vazios são omitidos. É este texto que é salvo no campo legado
+ * `categoria` a cada criação/edição com classificação nova, para manter
+ * compatibilidade com qualquer parte antiga do sistema que ainda leia só
+ * `categoria`.
  */
 export function formatarCategoriaHierarquica(classificacao: ClassificacaoSuporte): string {
-  return [classificacao.categoriaPrincipal, classificacao.subcategoria, classificacao.detalhamento]
+  return [
+    classificacao.projeto,
+    classificacao.categoriaPrincipal,
+    classificacao.subcategoria,
+    classificacao.detalhamento,
+  ]
     .filter((parte): parte is string => Boolean(parte))
-    .join(" > ");
+    .join(SEPARADOR);
 }
 
 /**
- * Rótulo de exibição para listagem/relatórios: usa a hierarquia nova quando
- * disponível (`categoriaPrincipal` preenchido) ou cai para o valor antigo de
- * `categoria` — sem isso, atendimentos registrados antes desta classificação
- * ficariam sem nenhuma categoria visível.
+ * Codifica Projeto + Categoria Principal para gravação na coluna
+ * `SupportTicket.categoriaPrincipal` (única coluna estruturada disponível
+ * para representar o novo nível "Projeto", sem alterar o schema — ver nota
+ * no topo do arquivo). Devolve `null` quando nenhum Projeto foi escolhido.
+ */
+export function combinarProjetoCategoria(
+  projeto: string | null | undefined,
+  categoriaPrincipal: string | null | undefined
+): string | null {
+  if (!projeto) return null;
+  if (!categoriaPrincipal) return projeto;
+  return `${projeto}${SEPARADOR}${categoriaPrincipal}`;
+}
+
+export type ProjetoCategoriaPersistida = {
+  projeto: string;
+  categoriaPrincipal: string | null;
+};
+
+/**
+ * Decodifica o valor gravado em `SupportTicket.categoriaPrincipal` de volta
+ * para `{ projeto, categoriaPrincipal }`, SOMENTE quando o valor casa
+ * exatamente com a matriz atual (um Projeto válido, sozinho ou seguido de
+ * " > " + uma Categoria Principal que pertença a esse Projeto). Qualquer
+ * outro valor — nunca classificado, uma categoria "solta" (sem Projeto) da
+ * matriz anterior, ou qualquer formato mais antigo — devolve `null`,
+ * sinalizando "trate como categoria legada" para quem chama.
+ */
+export function interpretarCategoriaPrincipalPersistida(
+  valor: string | null | undefined
+): ProjetoCategoriaPersistida | null {
+  if (!valor) return null;
+
+  const projetos = obterProjetos();
+
+  // Só o Projeto foi escolhido (Categoria Principal ainda vazia).
+  if (projetos.includes(valor)) {
+    return { projeto: valor, categoriaPrincipal: null };
+  }
+
+  const indiceSeparador = valor.indexOf(SEPARADOR);
+  if (indiceSeparador === -1) return null; // não é um Projeto puro nem um composto — legado.
+
+  const possivelProjeto = valor.slice(0, indiceSeparador);
+  const categoriaCandidata = valor.slice(indiceSeparador + SEPARADOR.length);
+  if (!projetos.includes(possivelProjeto)) return null;
+
+  const categoriasDoProjeto = obterCategoriasPrincipais(possivelProjeto);
+  if (!categoriasDoProjeto.includes(categoriaCandidata)) return null;
+
+  return { projeto: possivelProjeto, categoriaPrincipal: categoriaCandidata };
+}
+
+/**
+ * Rótulo de exibição para listagem/relatórios: reconstrói a hierarquia nova
+ * completa (Projeto → Categoria Principal → Subcategoria → Detalhamento)
+ * quando `categoriaPrincipal` for decodificável contra a matriz atual, ou cai
+ * para o valor antigo de `categoria` — sem isso, atendimentos registrados
+ * antes desta classificação (ou com uma classificação de uma matriz
+ * anterior, que não existe mais aqui) ficariam sem nenhuma categoria visível
+ * corretamente formatada.
  */
 export function obterRotuloCategoriaExibicao(ticket: {
   categoriaPrincipal: string | null;
@@ -294,6 +415,51 @@ export function obterRotuloCategoriaExibicao(ticket: {
   detalhamento: string | null;
   categoria: string;
 }): string {
-  if (ticket.categoriaPrincipal) return formatarCategoriaHierarquica(ticket);
-  return ticket.categoria;
+  const decodificado = interpretarCategoriaPrincipalPersistida(ticket.categoriaPrincipal);
+  if (!decodificado) return ticket.categoria;
+  return formatarCategoriaHierarquica({
+    projeto: decodificado.projeto,
+    categoriaPrincipal: decodificado.categoriaPrincipal,
+    subcategoria: ticket.subcategoria,
+    detalhamento: ticket.detalhamento,
+  });
+}
+
+/**
+ * Reconstrói a classificação (Projeto/Categoria/Subcategoria/Detalhamento)
+ * atualmente válida de um atendimento já salvo, para popular os selects do
+ * formulário de edição — ou `null` quando o atendimento não tem nenhuma
+ * classificação decodificável contra a matriz atual (nunca classificado, ou
+ * classificado por uma matriz anterior), caso em que a tela de edição deve
+ * tratar o atendimento como "categoria legada" (ver app/suporte/[id]/page.tsx).
+ *
+ * Também valida `subcategoria`/`detalhamento` contra a matriz atual (não
+ * apenas confia que estão corretos) — protege contra o caso raro de um
+ * registro com `categoriaPrincipal` decodificável mas subcategoria/detalhamento
+ * de uma combinação que não existe mais, evitando pré-selecionar algo
+ * inconsistente no seletor novo.
+ */
+export function obterClassificacaoAtualValida(ticket: {
+  categoriaPrincipal: string | null;
+  subcategoria: string | null;
+  detalhamento: string | null;
+}): ClassificacaoSuporte | null {
+  const decodificado = interpretarCategoriaPrincipalPersistida(ticket.categoriaPrincipal);
+  if (!decodificado) return null;
+
+  const { projeto, categoriaPrincipal } = decodificado;
+
+  const subcategoria =
+    ticket.subcategoria && obterSubcategorias(projeto, categoriaPrincipal).includes(ticket.subcategoria)
+      ? ticket.subcategoria
+      : null;
+
+  const detalhamento =
+    subcategoria &&
+    ticket.detalhamento &&
+    obterDetalhamentos(projeto, categoriaPrincipal, subcategoria).includes(ticket.detalhamento)
+      ? ticket.detalhamento
+      : null;
+
+  return { projeto, categoriaPrincipal, subcategoria, detalhamento };
 }

@@ -2,7 +2,11 @@
 
 import { prisma } from "@/lib/prisma";
 import { calcularTempoAtendimento, normalizarSite } from "@/lib/suporte";
-import { validarClassificacaoSuporte, formatarCategoriaHierarquica } from "@/lib/categoriasSuporte";
+import {
+  validarClassificacaoSuporte,
+  formatarCategoriaHierarquica,
+  combinarProjetoCategoria,
+} from "@/lib/categoriasSuporte";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ACOES, requirePerformAction, criarFiltroDeAcessoAtendimentos } from "@/lib/autorizacao";
@@ -32,6 +36,11 @@ export async function createTicket(formData: FormData) {
   const cliente = campoOpcional(formData, "cliente");
   const site = normalizarSite(campoOpcional(formData, "site"));
   const tipoAtendimento = campoTexto(formData, "tipo_atendimento");
+  // "categoria_projeto" é o nível novo (topo) da hierarquia v7.1
+  // (IEZ/ERICSSON/HUAWEI/NOKIA/ZTE) — nome de campo distinto do já existente
+  // "projeto" (texto livre, nome de projeto do cliente) lido acima, para
+  // nunca colidir com ele no mesmo formulário (ver SeletorCategoriaSuporte.tsx).
+  const categoriaProjeto = campoOpcional(formData, "categoria_projeto");
   const categoriaPrincipal = campoOpcional(formData, "categoria_principal");
   const subcategoria = campoOpcional(formData, "subcategoria");
   const detalhamento = campoOpcional(formData, "detalhamento");
@@ -42,22 +51,45 @@ export async function createTicket(formData: FormData) {
   const observacoes = campoOpcional(formData, "observacoes");
   const tecnicoResponsavel = campoOpcional(formData, "tecnico_responsavel");
 
-  // Categoria Principal é obrigatória na criação (Subcategoria/Detalhamento
-  // continuam opcionais — nem toda categoria os possui, ver
-  // lib/categoriasSuporte.ts). Combinações fora da estrutura oficial (ex.:
-  // "3 - ATIVAÇÃO" com subcategoria "A - ENERGIA", que só existe em
-  // "4 - INFRAESTRUTURA") são rejeitadas aqui, no servidor — nunca confiamos
-  // apenas na cascata do formulário no cliente.
-  if (!dataAtendimentoRaw || !horaInicio || !tipoAtendimento || !categoriaPrincipal || !descricaoProblema || !resultado) {
+  // Projeto e Categoria Principal são obrigatórios na criação
+  // (Subcategoria/Detalhamento continuam opcionais — nem toda categoria os
+  // possui, ver lib/categoriasSuporte.ts). Combinações fora da estrutura
+  // oficial (ex.: Projeto "IEZ" com Categoria Principal "Ativação", que só
+  // existe nos projetos de campo) são rejeitadas aqui, no servidor — nunca
+  // confiamos apenas na cascata do formulário no cliente.
+  if (
+    !dataAtendimentoRaw ||
+    !horaInicio ||
+    !tipoAtendimento ||
+    !categoriaProjeto ||
+    !categoriaPrincipal ||
+    !descricaoProblema ||
+    !resultado
+  ) {
     return;
   }
-  const validacaoCategoria = validarClassificacaoSuporte({ categoriaPrincipal, subcategoria, detalhamento });
+  const validacaoCategoria = validarClassificacaoSuporte({
+    projeto: categoriaProjeto,
+    categoriaPrincipal,
+    subcategoria,
+    detalhamento,
+  });
   if (!validacaoCategoria.valido) return;
 
   // Campo legado `categoria` (obrigatório no banco) recebe o texto formatado
-  // dos 3 níveis, para continuar pesquisável/exibível por quem só usa esse
+  // dos 4 níveis, para continuar pesquisável/exibível por quem só usa esse
   // campo (relatórios antigos, etc).
-  const categoria = formatarCategoriaHierarquica({ categoriaPrincipal, subcategoria, detalhamento });
+  const categoria = formatarCategoriaHierarquica({
+    projeto: categoriaProjeto,
+    categoriaPrincipal,
+    subcategoria,
+    detalhamento,
+  });
+  // A tabela não tem uma coluna dedicada para "Projeto" da hierarquia nova —
+  // ele é codificado dentro da própria coluna `categoriaPrincipal` (ver
+  // lib/categoriasSuporte.ts, combinarProjetoCategoria/
+  // interpretarCategoriaPrincipalPersistida), sem exigir nenhuma migration.
+  const categoriaPrincipalPersistida = combinarProjetoCategoria(categoriaProjeto, categoriaPrincipal);
 
   const tempoAtendimento = calcularTempoAtendimento(horaInicio, horaFim);
 
@@ -73,7 +105,7 @@ export async function createTicket(formData: FormData) {
       site,
       tipoAtendimento,
       categoria,
-      categoriaPrincipal,
+      categoriaPrincipal: categoriaPrincipalPersistida,
       subcategoria,
       detalhamento,
       descricaoProblema,
@@ -112,6 +144,10 @@ export async function updateTicket(formData: FormData) {
   const cliente = campoOpcional(formData, "cliente");
   const site = normalizarSite(campoOpcional(formData, "site"));
   const tipoAtendimento = campoTexto(formData, "tipo_atendimento");
+  // Ver nota equivalente em createTicket: "categoria_projeto" é o nível novo
+  // (topo) da hierarquia v7.1, nome de campo distinto do "projeto" de texto
+  // livre lido acima.
+  const categoriaProjeto = campoOpcional(formData, "categoria_projeto");
   const categoriaPrincipal = campoOpcional(formData, "categoria_principal");
   const subcategoria = campoOpcional(formData, "subcategoria");
   const detalhamento = campoOpcional(formData, "detalhamento");
@@ -127,12 +163,13 @@ export async function updateTicket(formData: FormData) {
   }
 
   // Classificação hierárquica na edição é opcional por design: se o usuário
-  // deixar "Categoria Principal" em branco, NÃO tocamos em nenhum dos 4
-  // campos de categoria (`categoria`/`categoriaPrincipal`/`subcategoria`/
-  // `detalhamento`) — preserva tanto uma classificação hierárquica já salva
-  // quanto um atendimento antigo só com o `categoria` legado. Só substituímos
-  // a classificação quando o usuário efetivamente escolhe uma nova Categoria
-  // Principal e salva (regra explícita da missão).
+  // deixar "Projeto" em branco, NÃO tocamos em nenhum dos 4 campos de
+  // categoria (`categoria`/`categoriaPrincipal`/`subcategoria`/`detalhamento`)
+  // — preserva tanto uma classificação hierárquica já salva quanto um
+  // atendimento antigo só com o `categoria` legado. Só substituímos a
+  // classificação quando o usuário efetivamente escolhe um novo Projeto e
+  // salva (regra explícita da missão — "Projeto" é agora o topo da
+  // hierarquia, substituindo "Categoria Principal" nesse papel de gatilho).
   let dadosCategoria: {
     categoria?: string;
     categoriaPrincipal?: string | null;
@@ -140,13 +177,23 @@ export async function updateTicket(formData: FormData) {
     detalhamento?: string | null;
   } = {};
 
-  if (categoriaPrincipal) {
-    const validacaoCategoria = validarClassificacaoSuporte({ categoriaPrincipal, subcategoria, detalhamento });
+  if (categoriaProjeto) {
+    const validacaoCategoria = validarClassificacaoSuporte({
+      projeto: categoriaProjeto,
+      categoriaPrincipal,
+      subcategoria,
+      detalhamento,
+    });
     if (!validacaoCategoria.valido) return;
 
     dadosCategoria = {
-      categoria: formatarCategoriaHierarquica({ categoriaPrincipal, subcategoria, detalhamento }),
-      categoriaPrincipal,
+      categoria: formatarCategoriaHierarquica({
+        projeto: categoriaProjeto,
+        categoriaPrincipal,
+        subcategoria,
+        detalhamento,
+      }),
+      categoriaPrincipal: combinarProjetoCategoria(categoriaProjeto, categoriaPrincipal),
       subcategoria,
       detalhamento,
     };

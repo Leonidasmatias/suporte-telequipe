@@ -2,32 +2,47 @@
 
 import { useState } from "react";
 import {
+  obterProjetos,
   obterCategoriasPrincipais,
   obterSubcategorias,
   obterDetalhamentos,
-  type Grupo,
 } from "@/lib/categoriasSuporte";
 
 /**
- * Seletor hierárquico de Categoria de Suporte (Categoria Principal →
- * Subcategoria → Detalhamento), com 3 `<select>` dependentes. Usado tanto no
- * formulário de novo atendimento/edição quanto no painel de filtros da
+ * Seletor hierárquico de Categoria de Suporte (Projeto → Categoria Principal
+ * → Subcategoria → Detalhamento), com 4 `<select>` dependentes. Usado tanto
+ * no formulário de novo atendimento/edição quanto no painel de filtros da
  * listagem (`modoFiltro`) — mesmo componente, mesma fonte única de dados
  * (`lib/categoriasSuporte.ts`), para nunca duplicar a lista em vários lugares.
  *
+ * MISSÃO v7.1 (revisão da matriz hierárquica): o nível "Projeto" aqui
+ * (IEZ/ERICSSON/HUAWEI/NOKIA/ZTE) é um conceito NOVO e completamente
+ * diferente do campo de texto livre "Projeto" já existente em outras partes
+ * do mesmo formulário (nome de projeto do cliente, ex.: "Expansão 5G Regional
+ * Sul") — por isso o `<select>` deste nível usa o nome de campo
+ * `categoria_projeto` (nunca `projeto`), evitando qualquer colisão com aquele
+ * outro campo quando os dois aparecem no mesmo `<form>`.
+ *
  * Regras de cascata:
+ * - Categoria Principal começa desabilitada até um Projeto ser escolhido, e
+ *   lista só as categorias daquele Projeto. Desde a correção "IEZ deve
+ *   replicar os demais projetos", os 5 Projetos (ERICSSON/HUAWEI/NOKIA/ZTE/
+ *   IEZ) compartilham exatamente a mesma lista de Categorias Principais
+ *   (MOS, Infraestrutura, Instalação, Ativação, Aceitação) — nenhum Projeto
+ *   tem categoria exclusiva.
  * - Subcategoria começa desabilitada até uma Categoria Principal ser
- *   escolhida, e some/limpa se a Categoria Principal não tiver nenhuma
- *   subcategoria (ex.: "A - TREINAMENTO").
+ *   escolhida.
  * - Detalhamento começa desabilitado até uma Subcategoria com detalhamentos
  *   ser escolhida.
- * - Trocar a Categoria Principal limpa Subcategoria e Detalhamento. Trocar a
+ * - Trocar o Projeto limpa Categoria Principal, Subcategoria e Detalhamento.
+ *   Trocar a Categoria Principal limpa Subcategoria e Detalhamento. Trocar a
  *   Subcategoria limpa o Detalhamento. Nunca é possível ver opções fora da
  *   seleção do nível pai (as listas vêm sempre filtradas de
- *   `obterSubcategorias`/`obterDetalhamentos`).
+ *   `obterCategoriasPrincipais`/`obterSubcategorias`/`obterDetalhamentos`).
  *
- * Modo criação (`obrigatorio=true`): Categoria Principal é obrigatória.
- * Modo edição (`obrigatorio=false`, o padrão): todos os 3 níveis podem ficar
+ * Modo criação (`obrigatorio=true`): Projeto e Categoria Principal são
+ * obrigatórios.
+ * Modo edição (`obrigatorio=false`, o padrão): todos os 4 níveis podem ficar
  * em branco — usado para permitir que um atendimento com apenas o campo
  * legado `categoria` seja salvo sem alterar a classificação ("Não substituir
  * a categoria legada a menos que o usuário selecione uma nova classificação
@@ -38,6 +53,7 @@ import {
 export default function SeletorCategoriaSuporte({
   obrigatorio = false,
   modoFiltro = false,
+  projetoDefault = "",
   categoriaPrincipalDefault = "",
   subcategoriaDefault = "",
   detalhamentoDefault = "",
@@ -45,27 +61,52 @@ export default function SeletorCategoriaSuporte({
 }: {
   obrigatorio?: boolean;
   modoFiltro?: boolean;
+  projetoDefault?: string;
   categoriaPrincipalDefault?: string;
   subcategoriaDefault?: string;
   detalhamentoDefault?: string;
   className?: string;
 }) {
+  const [projeto, setProjeto] = useState(projetoDefault);
   const [categoriaPrincipal, setCategoriaPrincipal] = useState(categoriaPrincipalDefault);
   const [subcategoria, setSubcategoria] = useState(subcategoriaDefault);
   const [detalhamento, setDetalhamento] = useState(detalhamentoDefault);
 
-  const categoriasPrincipais = obterCategoriasPrincipais();
-  const subcategorias = obterSubcategorias(categoriaPrincipal);
-  const detalhamentos = obterDetalhamentos(categoriaPrincipal, subcategoria);
+  const projetos = obterProjetos();
+  const categoriasPrincipais = obterCategoriasPrincipais(projeto);
+  const subcategorias = obterSubcategorias(projeto, categoriaPrincipal);
+  const detalhamentos = obterDetalhamentos(projeto, categoriaPrincipal, subcategoria);
 
-  const grupos: Grupo[] = ["GRUPO GERAL", "GRUPO NOKIA"];
-
-  const rotuloVazioPrincipal = modoFiltro ? "Todas" : obrigatorio ? "Selecione" : "Não alterar / categoria legada";
+  const rotuloVazioProjeto = modoFiltro ? "Todos" : obrigatorio ? "Selecione" : "Não alterar / categoria legada";
+  const rotuloVazioPrincipal = modoFiltro ? "Todas" : !projeto ? "Selecione o Projeto primeiro" : "Selecione";
   const rotuloVazioSub = modoFiltro ? "Todas" : subcategorias.length === 0 ? "Não se aplica" : "Selecione";
   const rotuloVazioDet = modoFiltro ? "Todos" : detalhamentos.length === 0 ? "Não se aplica" : "Selecione";
 
   return (
-    <div className={`grid grid-cols-1 gap-4 sm:grid-cols-3 ${className}`}>
+    <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 ${className}`}>
+      <div>
+        <label className="label-field">Projeto</label>
+        <select
+          name="categoria_projeto"
+          required={obrigatorio}
+          className="input-field"
+          value={projeto}
+          onChange={(e) => {
+            setProjeto(e.target.value);
+            setCategoriaPrincipal("");
+            setSubcategoria("");
+            setDetalhamento("");
+          }}
+        >
+          <option value="">{rotuloVazioProjeto}</option>
+          {projetos.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <div>
         <label className="label-field">Categoria Principal</label>
         <select
@@ -73,6 +114,7 @@ export default function SeletorCategoriaSuporte({
           required={obrigatorio}
           className="input-field"
           value={categoriaPrincipal}
+          disabled={!projeto || categoriasPrincipais.length === 0}
           onChange={(e) => {
             setCategoriaPrincipal(e.target.value);
             setSubcategoria("");
@@ -80,16 +122,10 @@ export default function SeletorCategoriaSuporte({
           }}
         >
           <option value="">{rotuloVazioPrincipal}</option>
-          {grupos.map((grupo) => (
-            <optgroup key={grupo} label={grupo}>
-              {categoriasPrincipais
-                .filter((c) => c.grupo === grupo)
-                .map((c) => (
-                  <option key={c.valor} value={c.valor}>
-                    {c.valor}
-                  </option>
-                ))}
-            </optgroup>
+          {categoriasPrincipais.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
           ))}
         </select>
       </div>

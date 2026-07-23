@@ -50,14 +50,35 @@ describe("normalizarSite — campo Site do atendimento", () => {
   });
 });
 
-describe("buildWhereSuporte — filtro por classificação hierárquica de categoria", () => {
-  it("filtro por Categoria Principal aparece no where (busca estruturada)", () => {
-    const where = buildWhereSuporte({ categoriaPrincipal: "3 - ATIVAÇÃO" });
-    expect(JSON.stringify(where)).toContain("3 - ATIVAÇÃO");
+describe("buildWhereSuporte — filtro por classificação hierárquica de categoria (v7.1 — Projeto → Categoria → Subcategoria → Detalhamento)", () => {
+  it("filtro por Projeto aparece no where (busca estruturada, cobrindo Projeto puro e composto 'Projeto > Categoria')", () => {
+    const where = buildWhereSuporte({ categoriaProjeto: "NOKIA" });
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("NOKIA");
+    expect(texto).toContain("categoriaPrincipal");
+    expect(texto).toContain("startsWith");
+  });
+
+  it("filtro por Projeto também inclui a busca textual no campo legado `categoria` (compatibilidade com registros antigos)", () => {
+    const where = buildWhereSuporte({ categoriaProjeto: "NOKIA" });
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("insensitive");
+  });
+
+  it("sem filtro de Projeto, o where não inclui a cláusula de Projeto", () => {
+    const where = buildWhereSuporte({});
+    expect(JSON.stringify(where)).not.toContain("startsWith");
+  });
+
+  it("filtro por Categoria Principal aparece no where (busca estruturada, cobrindo o valor bruto e o composto 'Projeto > Categoria')", () => {
+    const where = buildWhereSuporte({ categoriaPrincipal: "MOS" });
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("MOS");
+    expect(texto).toContain("endsWith");
   });
 
   it("filtro por Categoria Principal também inclui a busca textual no campo legado `categoria` (compatibilidade com registros antigos)", () => {
-    const where = buildWhereSuporte({ categoriaPrincipal: "3 - ATIVAÇÃO" });
+    const where = buildWhereSuporte({ categoriaPrincipal: "MOS" });
     const texto = JSON.stringify(where);
     expect(texto).toContain("categoriaPrincipal");
     expect(texto).toContain("insensitive");

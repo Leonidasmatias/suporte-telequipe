@@ -186,6 +186,13 @@ export type FiltrosSuporte = {
   colaboradorId?: number;
   projeto?: string;
   categoria?: string;
+  /**
+   * Filtro pelo nível "Projeto" da NOVA hierarquia v7.1 (IEZ/ERICSSON/
+   * HUAWEI/NOKIA/ZTE) — conceito distinto do campo `projeto` acima (texto
+   * livre, nome de projeto do cliente). Nome de chave escolhido de propósito
+   * para nunca colidir com `projeto` (ver lib/categoriasSuporte.ts).
+   */
+  categoriaProjeto?: string;
   categoriaPrincipal?: string;
   subcategoria?: string;
   detalhamento?: string;
@@ -220,10 +227,34 @@ export function buildWhereSuporte(filtros: FiltrosSuporte): Prisma.SupportTicket
   // legado) é encontrado por busca textual (contains, case-insensitive) no
   // mesmo termo — assim o filtro funciona igual para os dois tipos de
   // registro, sem exigir que o usuário saiba se o atendimento é antigo ou novo.
+  //
+  // "Projeto" (nível novo, topo da hierarquia v7.1) é codificado DENTRO da
+  // própria coluna `categoriaPrincipal` (ver lib/categoriasSuporte.ts) —
+  // sozinho ("NOKIA") ou como prefixo de um composto ("NOKIA > MOS"). Por
+  // isso o filtro por Projeto casa com um valor exatamente igual OU que
+  // comece com "<projeto> > ", nunca com `startsWith` solto (que poderia
+  // colidir com outro Projeto cujo nome comece igual).
+  if (filtros.categoriaProjeto) {
+    const prefixoProjeto = `${filtros.categoriaProjeto}${" > "}`;
+    and.push({
+      OR: [
+        { categoriaPrincipal: filtros.categoriaProjeto },
+        { categoriaPrincipal: { startsWith: prefixoProjeto } },
+        { categoria: { contains: filtros.categoriaProjeto, mode: "insensitive" } },
+      ],
+    });
+  }
+  // "Categoria Principal" é o segundo nível — quando o Projeto está
+  // codificado junto (composto "NOKIA > MOS"), a Categoria Principal fica no
+  // final do valor persistido, por isso o `endsWith` além do match exato
+  // (que cobre o caso raro de uma Categoria Principal salva sozinha, sem
+  // Projeto — não deveria mais acontecer para atendimentos novos, mas o
+  // match exato é mantido por segurança/compatibilidade).
   if (filtros.categoriaPrincipal) {
     and.push({
       OR: [
         { categoriaPrincipal: filtros.categoriaPrincipal },
+        { categoriaPrincipal: { endsWith: ` > ${filtros.categoriaPrincipal}` } },
         { categoria: { contains: filtros.categoriaPrincipal, mode: "insensitive" } },
       ],
     });
