@@ -200,6 +200,22 @@ export type FiltrosSuporte = {
   tecnico?: string;
   site?: string;
   busca?: string;
+  /**
+   * Sprint v7.2 — REVISÃO ("Centro de Controle Operacional"). Acréscimo
+   * puramente aditivo, sem nenhum novo `<input>`/`<select>` visível no
+   * formulário de /suporte (que já está grande e homologado) — alcançável só
+   * via URL, principalmente a partir dos links de drill-down do Dashboard
+   * Executivo (ver lib/dashboardSuporte.ts). Mirrors o mesmo padrão de
+   * `status` (match exato).
+   */
+  resultado?: string;
+  /**
+   * Idem acima: acréscimo aditivo, só alcançável via URL/drill-down. Regional
+   * é um campo de texto livre do Colaborador (sem enum — ver
+   * lib/colaboradores.ts), por isso o match é `equals` case-insensitive
+   * (mesmo valor exato que já aparece nos agrupamentos do dashboard).
+   */
+  regional?: string;
 };
 
 /** Monta a cláusula `where` do Prisma a partir dos filtros/busca da tela de listagem e de relatórios. */
@@ -283,6 +299,11 @@ export function buildWhereSuporte(filtros: FiltrosSuporte): Prisma.SupportTicket
   // Busca parcial e sem diferenciar maiúsculas/minúsculas: "AQDIK4" encontra
   // "SN-AQDIK4", "SN-AQD" encontra qualquer site que contenha esse trecho.
   if (filtros.site) and.push({ site: { contains: filtros.site, mode: "insensitive" } });
+  // Sprint v7.2 — REVISÃO: campos aditivos (ver comentário no tipo acima).
+  if (filtros.resultado) and.push({ resultado: filtros.resultado });
+  if (filtros.regional) {
+    and.push({ colaborador: { regional: { equals: filtros.regional, mode: "insensitive" } } });
+  }
 
   if (filtros.busca) {
     const termo = filtros.busca.trim();

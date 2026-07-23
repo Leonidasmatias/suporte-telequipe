@@ -132,3 +132,39 @@ describe("buildWhereSuporte — filtro por Site", () => {
     expect(texto).toContain("Carlos");
   });
 });
+
+describe("buildWhereSuporte — filtros aditivos da Sprint v7.2 REVISÃO (resultado/regional, usados pelo drill-down do Dashboard Executivo)", () => {
+  it("filtro por Resultado aparece no where (match exato, mesmo padrão de `status`)", () => {
+    const where = buildWhereSuporte({ resultado: "Cancelado" });
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("resultado");
+    expect(texto).toContain("Cancelado");
+  });
+
+  it("sem filtro de Resultado, o where não inclui a cláusula de resultado", () => {
+    const where = buildWhereSuporte({});
+    expect(JSON.stringify(where)).not.toContain("resultado");
+  });
+
+  it("filtro por Regional aparece no where, via relação com Colaborador (equals, case-insensitive)", () => {
+    const where = buildWhereSuporte({ regional: "Sul" });
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("colaborador");
+    expect(texto).toContain("regional");
+    expect(texto).toContain("Sul");
+    expect(texto).toContain("insensitive");
+  });
+
+  it("sem filtro de Regional, o where não inclui a cláusula de regional", () => {
+    const where = buildWhereSuporte({});
+    expect(JSON.stringify(where)).not.toContain("regional");
+  });
+
+  it("combina resultado e regional com os demais filtros já existentes sem conflito", () => {
+    const where = buildWhereSuporte({ resultado: "Cancelado", regional: "Sul", categoriaProjeto: "NOKIA" });
+    const texto = JSON.stringify(where);
+    expect(texto).toContain("Cancelado");
+    expect(texto).toContain("Sul");
+    expect(texto).toContain("NOKIA");
+  });
+});

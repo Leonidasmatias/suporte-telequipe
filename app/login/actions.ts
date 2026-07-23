@@ -45,7 +45,11 @@ export async function entrar(formData: FormData): Promise<EntrarResultado> {
     maxAge: SESSAO_MAX_AGE_SEGUNDOS,
   });
 
-  redirect("/home");
+  // Sprint v7.2 — AJUSTE FINAL DE NAVEGAÇÃO: redirecionamento pós-login
+  // trocado de /home para /suporte/dashboard (Dashboard Executivo), para
+  // ADMIN e TECNICO igualmente — /home continua existindo e protegida como
+  // antes (RECURSOS.dashboard), só deixou de ser o destino após o login.
+  redirect("/suporte/dashboard");
 }
 
 /** Encerra a sessão (logout). */

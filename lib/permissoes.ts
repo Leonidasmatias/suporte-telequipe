@@ -32,6 +32,14 @@ export const RECURSOS = {
   insightsOperacionais: "insightsOperacionais",
   importacao: "importacao",
   usuarios: "usuarios",
+  /**
+   * Sprint v7.2 — ÚLTIMA REVISÃO. Recurso PRÓPRIO do Dashboard Executivo
+   * (/suporte/dashboard), completamente desacoplado de `relatorios`. Nome
+   * "dashboardExecutivo" (não "dashboard") de propósito: `dashboard` já
+   * existe acima e protege a Home (/home) — reaproveitar aquele nome para
+   * este novo recurso colidiria com um recurso já homologado.
+   */
+  dashboardExecutivo: "dashboardExecutivo",
 } as const;
 
 export type Recurso = (typeof RECURSOS)[keyof typeof RECURSOS];
@@ -72,6 +80,12 @@ const MATRIZ_RECURSOS: Record<Recurso, readonly Perfil[]> = {
   insightsOperacionais: ["ADMIN"], // especificação proíbe TECNICO explicitamente
   importacao: ["ADMIN"], // Smart Sync reestrutura o Cadastro Mestre — operação sensível, não listada para TECNICO
   usuarios: ["ADMIN"],
+  // Sprint v7.2 — ÚLTIMA REVISÃO: mesmo acesso que o Dashboard Executivo já
+  // tinha reaproveitando `relatorios` (ADMIN + TECNICO, TECNICO restrito aos
+  // próprios atendimentos via criarFiltroDeAcessoAtendimentos) — só a
+  // ENTRADA na matriz mudou de nome, o resultado de canAccess para quem já
+  // usava a tela é idêntico.
+  dashboardExecutivo: ["ADMIN", "TECNICO"],
 };
 
 /** Página/menu — TECNICO só vê o que a matriz autoriza para o perfil dele. */

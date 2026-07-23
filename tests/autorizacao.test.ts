@@ -167,6 +167,61 @@ describe("canAccess — matriz de recursos por perfil", () => {
   });
 });
 
+describe("RECURSOS.dashboardExecutivo — recurso próprio do Dashboard Executivo (Sprint v7.2 — ÚLTIMA REVISÃO)", () => {
+  it("RECURSOS.dashboardExecutivo existe e é distinto de RECURSOS.dashboard e RECURSOS.relatorios", () => {
+    expect(RECURSOS.dashboardExecutivo).toBeDefined();
+    expect(RECURSOS.dashboardExecutivo).not.toBe(RECURSOS.dashboard);
+    expect(RECURSOS.dashboardExecutivo).not.toBe(RECURSOS.relatorios);
+  });
+
+  it("ADMIN possui acesso ao Dashboard Executivo", () => {
+    expect(canAccess(usuarioAdmin() as any, RECURSOS.dashboardExecutivo)).toBe(true);
+  });
+
+  it("TECNICO possui acesso ao Dashboard Executivo (dentro do escopo já definido pelo sistema)", () => {
+    expect(canAccess(usuarioTecnico() as any, RECURSOS.dashboardExecutivo)).toBe(true);
+  });
+
+  it("usuário não autenticado não acessa o Dashboard Executivo", () => {
+    expect(canAccess(null, RECURSOS.dashboardExecutivo)).toBe(false);
+  });
+
+  it("RECURSOS.relatorios continua existindo e protegendo Relatórios, independente do Dashboard Executivo", () => {
+    expect(canAccess(usuarioAdmin() as any, RECURSOS.relatorios)).toBe(true);
+    expect(canAccess(usuarioTecnico() as any, RECURSOS.relatorios)).toBe(true);
+    expect(canAccess(null, RECURSOS.relatorios)).toBe(false);
+  });
+
+  it("nenhuma permissão preexistente foi removida: todos os recursos administrativos continuam bloqueados para TECNICO", () => {
+    const tecnico = usuarioTecnico() as any;
+    expect(canAccess(tecnico, RECURSOS.usuarios)).toBe(false);
+    expect(canAccess(tecnico, RECURSOS.colaboradores)).toBe(false);
+    expect(canAccess(tecnico, RECURSOS.importacao)).toBe(false);
+    expect(canAccess(tecnico, RECURSOS.insightsOperacionais)).toBe(false);
+  });
+});
+
+describe("requireAccess — rota do Dashboard Executivo usa RECURSOS.dashboardExecutivo (Sprint v7.2 — ÚLTIMA REVISÃO)", () => {
+  it("TECNICO acessa a rota protegida por RECURSOS.dashboardExecutivo", async () => {
+    cookieAtual = criarTokenSessao(2);
+    usuarioFindUniqueMock.mockResolvedValue(usuarioTecnico());
+    const usuario = await requireAccess(RECURSOS.dashboardExecutivo);
+    expect(usuario.perfil).toBe("TECNICO");
+  });
+
+  it("ADMIN acessa a rota protegida por RECURSOS.dashboardExecutivo", async () => {
+    cookieAtual = criarTokenSessao(1);
+    usuarioFindUniqueMock.mockResolvedValue(usuarioAdmin());
+    const usuario = await requireAccess(RECURSOS.dashboardExecutivo);
+    expect(usuario.perfil).toBe("ADMIN");
+  });
+
+  it("não autenticado é redirecionado para /login ao tentar acessar o Dashboard Executivo", async () => {
+    cookieAtual = undefined;
+    await expect(requireAccess(RECURSOS.dashboardExecutivo)).rejects.toThrow("NEXT_REDIRECT:/login");
+  });
+});
+
 describe("canPerform — matriz de ações por perfil", () => {
   it("TECNICO pode criar, editar e encerrar atendimentos, mas não excluir", () => {
     const tecnico = usuarioTecnico() as any;

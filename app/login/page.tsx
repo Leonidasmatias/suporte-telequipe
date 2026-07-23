@@ -6,13 +6,19 @@ export const dynamic = "force-dynamic";
 
 /**
  * Única página pública do sistema. Se já existe uma sessão válida, manda
- * direto para /home (evita mostrar a tela de login pra quem já está
- * logado, e evita loop: esta é a ÚNICA página que faz esse redirect "para a
- * frente" — todas as outras fazem redirect "para trás", para /login).
+ * direto para o Dashboard Executivo (evita mostrar a tela de login pra quem
+ * já está logado, e evita loop: esta é a ÚNICA página que faz esse redirect
+ * "para a frente" — todas as outras fazem redirect "para trás", para
+ * /login).
+ *
+ * Sprint v7.2 — AJUSTE FINAL DE NAVEGAÇÃO: destino trocado de /home para
+ * /suporte/dashboard (Dashboard Executivo é agora a página inicial do
+ * sistema) — /home continua existindo e protegida como antes, só deixou de
+ * ser o destino automático.
  */
 export default async function LoginPage() {
   const usuario = await getUsuarioAtual();
-  if (usuario) redirect("/home");
+  if (usuario) redirect("/suporte/dashboard");
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#ffffff] px-4">

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { navItems } from "@/lib/navegacao";
-import { canAccess } from "@/lib/permissoes";
+import { canAccess, RECURSOS } from "@/lib/permissoes";
 import type { UsuarioSessao } from "@/lib/auth";
 
 /**
@@ -25,13 +25,13 @@ describe("Menu lateral — ADMIN", () => {
     const labels = labelsVisiveis(admin);
     expect(labels).toEqual(
       expect.arrayContaining([
-        "Dashboard",
         "Colaboradores",
         "Matriz Nokia",
         "Treinamentos",
         "Insights Operacionais",
         "Suporte Técnico",
         "Relatórios de Suporte",
+        "Dashboard Executivo",
         "Importação Massiva",
         "Usuários",
       ])
@@ -41,10 +41,10 @@ describe("Menu lateral — ADMIN", () => {
 });
 
 describe("Menu lateral — TECNICO", () => {
-  it("vê somente os módulos autorizados pela especificação (Home/Dashboard, Suporte, Treinamentos, Matriz Nokia, Relatórios de Suporte)", () => {
+  it("vê somente os módulos autorizados pela especificação (Suporte, Treinamentos, Matriz Nokia, Relatórios de Suporte, Dashboard Executivo)", () => {
     const labels = labelsVisiveis(tecnico);
     expect(labels.sort()).toEqual(
-      ["Dashboard", "Matriz Nokia", "Relatórios de Suporte", "Suporte Técnico", "Treinamentos"].sort()
+      ["Dashboard Executivo", "Matriz Nokia", "Relatórios de Suporte", "Suporte Técnico", "Treinamentos"].sort()
     );
   });
 
@@ -70,5 +70,57 @@ describe("Menu lateral — usuário não autenticado", () => {
   it("não vê nenhum item (canAccess nega tudo para usuário nulo)", () => {
     const labels = navItems.filter((item) => canAccess(null, item.recurso));
     expect(labels).toHaveLength(0);
+  });
+});
+
+describe("Menu lateral — item 'Dashboard Executivo' usa RECURSOS.dashboardExecutivo (Sprint v7.2 — ÚLTIMA REVISÃO)", () => {
+  it("o item do menu aponta para /suporte/dashboard e usa o recurso próprio, não RECURSOS.relatorios", () => {
+    const item = navItems.find((i) => i.label === "Dashboard Executivo");
+    expect(item).toBeDefined();
+    expect(item?.href).toBe("/suporte/dashboard");
+    expect(item?.recurso).toBe(RECURSOS.dashboardExecutivo);
+    expect(item?.recurso).not.toBe(RECURSOS.relatorios);
+  });
+});
+
+describe("Menu lateral — Ajuste final de navegação (Sprint v7.2)", () => {
+  it("o item antigo 'Dashboard' (/home) não aparece mais em navItems", () => {
+    expect(navItems.find((i) => i.label === "Dashboard")).toBeUndefined();
+    expect(navItems.find((i) => i.href === "/home")).toBeUndefined();
+  });
+
+  it("'Dashboard Executivo' é o primeiro item principal do menu", () => {
+    expect(navItems[0]?.label).toBe("Dashboard Executivo");
+    expect(navItems[0]?.href).toBe("/suporte/dashboard");
+  });
+
+  it("ADMIN visualiza 'Dashboard Executivo'", () => {
+    expect(labelsVisiveis(admin)).toContain("Dashboard Executivo");
+  });
+
+  it("TECNICO visualiza 'Dashboard Executivo'", () => {
+    expect(labelsVisiveis(tecnico)).toContain("Dashboard Executivo");
+  });
+
+  it("nenhuma outra entrada do menu foi removida (só 'Dashboard' saiu; os outros 8 itens continuam presentes)", () => {
+    const labels = navItems.map((i) => i.label);
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        "Dashboard Executivo",
+        "Suporte Técnico",
+        "Relatórios de Suporte",
+        "Colaboradores",
+        "Treinamentos",
+        "Matriz Nokia",
+        "Insights Operacionais",
+        "Importação Massiva",
+        "Usuários",
+      ])
+    );
+    expect(navItems).toHaveLength(9);
+  });
+
+  it("RECURSOS.dashboard (que protegia o item antigo) continua definido — não foi removido, só deixou de aparecer no menu", () => {
+    expect(RECURSOS.dashboard).toBeDefined();
   });
 });

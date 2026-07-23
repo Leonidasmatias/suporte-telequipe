@@ -76,6 +76,12 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
     tecnico: primeiro(searchParams.tecnico) || undefined,
     site: primeiro(searchParams.site) || undefined,
     busca: primeiro(searchParams.busca) || undefined,
+    // Sprint v7.2 — REVISÃO: sem <input>/<select> correspondente nesta
+    // página (ver nota em lib/suporte.ts) — alcançáveis só via URL, em
+    // especial pelos links de drill-down do Dashboard Executivo
+    // (/suporte/dashboard).
+    resultado: primeiro(searchParams.resultado) || undefined,
+    regional: primeiro(searchParams.regional) || undefined,
   };
   const filtros = filtrosPermitidosParaPerfil(filtrosBrutos, usuario);
 
@@ -97,6 +103,8 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
       tecnico: filtros.tecnico,
       site: filtros.site,
       busca: filtros.busca,
+      resultado: filtros.resultado,
+      regional: filtros.regional,
     }).filter((par): par is [string, string] => par[1] !== undefined)
   ).toString();
 
