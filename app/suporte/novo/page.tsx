@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import TempoAtendimentoInputs from "@/components/TempoAtendimentoInputs";
 import SeletorCategoriaSuporte from "@/components/SeletorCategoriaSuporte";
+import SeletorProjetoRegional from "@/components/SeletorProjetoRegional";
 import { createTicket } from "../actions";
 import { TIPOS_ATENDIMENTO, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
 import { RECURSOS, requireAccess } from "@/lib/autorizacao";
@@ -37,8 +38,8 @@ export default async function NovoAtendimentoPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="sm:col-span-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
             <label className="label-field">Colaborador</label>
             <select name="colaborador_id" className="input-field">
               <option value="">Não informado</option>
@@ -48,10 +49,6 @@ export default async function NovoAtendimentoPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="label-field">Projeto</label>
-            <input name="projeto" className="input-field" placeholder="Ex: Expansão 5G Regional Sul" />
           </div>
           <div>
             <label className="label-field">Cliente</label>
@@ -92,8 +89,22 @@ export default async function NovoAtendimentoPage() {
           </div>
         </div>
 
-        <div>
+        {/* Missão "Unificação visual Projeto/Regional no bloco Categoria do
+            atendimento": Projeto e Regional (matriz oficial, ver
+            lib/projetoRegional.ts) foram trazidos para dentro deste mesmo
+            bloco, antes da Categoria/Subcategoria/Detalhamento, na ordem
+            exigida — sem duplicar os campos (cada um continua existindo em
+            um único lugar do formulário) e sem alterar a validação de
+            nenhum dos dois (ambas continuam em app/suporte/actions.ts,
+            inalteradas). */}
+        <div className="rounded-lg border border-graphite-800 p-4">
           <p className="label-field mb-1">Categoria do atendimento</p>
+          <p className="mb-4 text-xs text-graphite-500">
+            Selecione primeiro o Projeto e a Regional para depois informar a Categoria, Subcategoria e Detalhamento.
+          </p>
+          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <SeletorProjetoRegional />
+          </div>
           <SeletorCategoriaSuporte obrigatorio />
         </div>
 

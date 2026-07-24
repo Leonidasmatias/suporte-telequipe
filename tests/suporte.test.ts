@@ -50,38 +50,39 @@ describe("normalizarSite — campo Site do atendimento", () => {
   });
 });
 
-describe("buildWhereSuporte — filtro por classificação hierárquica de categoria (v7.1 — Projeto → Categoria → Subcategoria → Detalhamento)", () => {
-  it("filtro por Projeto aparece no where (busca estruturada, cobrindo Projeto puro e composto 'Projeto > Categoria')", () => {
-    const where = buildWhereSuporte({ categoriaProjeto: "NOKIA" });
+describe("buildWhereSuporte — filtro por Projeto oficial (matriz Projeto × Regional, v7.3 — único campo Projeto do sistema)", () => {
+  it("filtro por Projeto aparece no where (busca textual, case-insensitive, sobre `SupportTicket.projeto`)", () => {
+    const where = buildWhereSuporte({ projeto: "ERICSSON-CLARO" });
     const texto = JSON.stringify(where);
-    expect(texto).toContain("NOKIA");
-    expect(texto).toContain("categoriaPrincipal");
-    expect(texto).toContain("startsWith");
-  });
-
-  it("filtro por Projeto também inclui a busca textual no campo legado `categoria` (compatibilidade com registros antigos)", () => {
-    const where = buildWhereSuporte({ categoriaProjeto: "NOKIA" });
-    const texto = JSON.stringify(where);
+    expect(texto).toContain("ERICSSON-CLARO");
+    expect(texto).toContain("projeto");
     expect(texto).toContain("insensitive");
   });
 
   it("sem filtro de Projeto, o where não inclui a cláusula de Projeto", () => {
     const where = buildWhereSuporte({});
-    expect(JSON.stringify(where)).not.toContain("startsWith");
+    expect(JSON.stringify(where)).not.toContain('"projeto"');
   });
+});
 
-  it("filtro por Categoria Principal aparece no where (busca estruturada, cobrindo o valor bruto e o composto 'Projeto > Categoria')", () => {
+describe("buildWhereSuporte — filtro por classificação hierárquica de categoria (v7.3 — sem nível de Projeto/Fabricante, Categoria Principal → Subcategoria → Detalhamento)", () => {
+  it("filtro por Categoria Principal aparece no where (match exato do valor estruturado)", () => {
     const where = buildWhereSuporte({ categoriaPrincipal: "MOS" });
     const texto = JSON.stringify(where);
     expect(texto).toContain("MOS");
-    expect(texto).toContain("endsWith");
+    expect(texto).toContain("categoriaPrincipal");
   });
 
-  it("filtro por Categoria Principal também inclui a busca textual no campo legado `categoria` (compatibilidade com registros antigos)", () => {
+  it("filtro por Categoria Principal também inclui a busca textual no campo legado `categoria` (compatibilidade com registros antigos, ex.: 'NOKIA > MOS')", () => {
     const where = buildWhereSuporte({ categoriaPrincipal: "MOS" });
     const texto = JSON.stringify(where);
     expect(texto).toContain("categoriaPrincipal");
     expect(texto).toContain("insensitive");
+  });
+
+  it("sem filtro de Categoria Principal, o where não inclui a cláusula de Categoria Principal", () => {
+    const where = buildWhereSuporte({});
+    expect(JSON.stringify(where)).not.toContain("categoriaPrincipal");
   });
 
   it("filtro por Subcategoria aparece no where", () => {
@@ -161,10 +162,10 @@ describe("buildWhereSuporte — filtros aditivos da Sprint v7.2 REVISÃO (result
   });
 
   it("combina resultado e regional com os demais filtros já existentes sem conflito", () => {
-    const where = buildWhereSuporte({ resultado: "Cancelado", regional: "Sul", categoriaProjeto: "NOKIA" });
+    const where = buildWhereSuporte({ resultado: "Cancelado", regional: "Sul", categoriaPrincipal: "MOS" });
     const texto = JSON.stringify(where);
     expect(texto).toContain("Cancelado");
     expect(texto).toContain("Sul");
-    expect(texto).toContain("NOKIA");
+    expect(texto).toContain("MOS");
   });
 });

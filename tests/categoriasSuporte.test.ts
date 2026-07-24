@@ -1,13 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
-  obterProjetos,
   obterCategoriasPrincipais,
   obterSubcategorias,
   obterDetalhamentos,
   validarClassificacaoSuporte,
   formatarCategoriaHierarquica,
-  combinarProjetoCategoria,
-  interpretarCategoriaPrincipalPersistida,
+  categoriaPrincipalValida,
   obterRotuloCategoriaExibicao,
   obterClassificacaoAtualValida,
 } from "@/lib/categoriasSuporte";
@@ -15,57 +13,40 @@ import {
 // Este módulo é TypeScript puro (não importa Prisma nem Next), então os
 // testes rodam direto contra as funções reais, sem nenhum mock.
 //
-// Missão "TELEQUIPE SUPORTE STA v7.1 — Correção da Matriz — IEZ deve
-// replicar os demais projetos": a primeira versão da revisão v7.1 tinha dado
-// ao Projeto IEZ uma estrutura EXCLUSIVA ("Dia de Integração" com 7
-// subcategorias próprias). Esta correção descarta completamente essa
-// estrutura exclusiva: os 5 Projetos (ERICSSON, HUAWEI, NOKIA, ZTE, IEZ)
-// agora compartilham exatamente a mesma matriz operacional de 5 Categorias
-// Principais (MOS, Infraestrutura, Instalação, Ativação, Aceitação). Estes
-// testes cobrem essa nova regra e a compatibilidade com qualquer registro
-// legado — inclusive os que tenham sido classificados com a estrutura
-// exclusiva do IEZ durante a implementação anterior desta mesma sprint.
-
-describe("obterProjetos", () => {
-  it("retorna exatamente os 5 Projetos oficiais, na ordem definida", () => {
-    expect(obterProjetos()).toEqual(["ERICSSON", "HUAWEI", "NOKIA", "ZTE", "IEZ"]);
-  });
-});
+// Missão "Refatoração da Categoria do Atendimento — eliminação do campo
+// Projeto duplicado" (TELEQUIPE SUPORTE STA v7.3): o nível "Projeto"
+// (antes IEZ/ERICSSON/HUAWEI/NOKIA/ZTE, um Fabricante) foi COMPLETAMENTE
+// REMOVIDO da hierarquia de Categoria do Atendimento — decisão explícita do
+// usuário para existir um único campo "Projeto" no sistema (a matriz oficial
+// Projeto × Regional, ver lib/projetoRegional.ts). A hierarquia agora tem
+// só 3 níveis: Categoria Principal → Subcategoria → Detalhamento, com 5
+// Categorias Principais (MOS, Infraestrutura, Instalação, Ativação,
+// Aceitação — Aceitação mantida por decisão explícita do usuário, mesmo não
+// fazendo parte da nova lista da missão). Estes testes cobrem a nova matriz
+// e a compatibilidade com qualquer registro legado (de qualquer formato
+// anterior — Fabricante puro, "Fabricante > Categoria", ou uma matriz ainda
+// mais antiga).
 
 describe("obterCategoriasPrincipais", () => {
-  it("IEZ apresenta EXATAMENTE as mesmas 5 Categorias Principais dos demais projetos (correção desta missão)", () => {
-    const esperado = ["MOS", "Infraestrutura", "Instalação", "Ativação", "Aceitação"];
-    expect(obterCategoriasPrincipais("IEZ")).toEqual(esperado);
-  });
-
-  it("todos os 5 projetos (ERICSSON/HUAWEI/NOKIA/ZTE/IEZ) reutilizam a mesma matriz operacional", () => {
-    const esperado = ["MOS", "Infraestrutura", "Instalação", "Ativação", "Aceitação"];
-    for (const projeto of obterProjetos()) {
-      expect(obterCategoriasPrincipais(projeto)).toEqual(esperado);
-    }
-  });
-
-  it("IEZ não tem mais nenhuma categoria exclusiva antiga (ex.: 'Dia de Integração')", () => {
-    expect(obterCategoriasPrincipais("IEZ")).not.toContain("Dia de Integração");
-  });
-
-  it("retorna lista vazia para Projeto inexistente, vazio ou nulo", () => {
-    expect(obterCategoriasPrincipais("PROJETO-FANTASMA")).toEqual([]);
-    expect(obterCategoriasPrincipais(null)).toEqual([]);
-    expect(obterCategoriasPrincipais(undefined)).toEqual([]);
-    expect(obterCategoriasPrincipais("")).toEqual([]);
+  it("retorna exatamente as 5 Categorias Principais oficiais, na ordem definida", () => {
+    expect(obterCategoriasPrincipais()).toEqual(["MOS", "Infraestrutura", "Instalação", "Ativação", "Aceitação"]);
   });
 });
 
 describe("obterSubcategorias", () => {
-  it("IEZ > MOS tem as mesmas subcategorias que qualquer outro projeto > MOS", () => {
-    const esperado = ["Log de Antes", "EHS", "Logística / Transportadora", "Material", "Aplicativos", "Orientação"];
-    expect(obterSubcategorias("IEZ", "MOS")).toEqual(esperado);
-    expect(obterSubcategorias("NOKIA", "MOS")).toEqual(esperado);
+  it("retorna as subcategorias de MOS", () => {
+    expect(obterSubcategorias("MOS")).toEqual([
+      "Log de Antes",
+      "EHS",
+      "Logística / Transportadora",
+      "Material",
+      "Aplicativos",
+      "Orientação",
+    ]);
   });
 
-  it("retorna as subcategorias de ERICSSON > Infraestrutura", () => {
-    expect(obterSubcategorias("ERICSSON", "Infraestrutura")).toEqual([
+  it("retorna as subcategorias de Infraestrutura", () => {
+    expect(obterSubcategorias("Infraestrutura")).toEqual([
       "Energia",
       "TX",
       "Fibra Óptica",
@@ -74,66 +55,90 @@ describe("obterSubcategorias", () => {
     ]);
   });
 
-  it("retorna lista vazia para 'Dia de Integração' em qualquer projeto (categoria exclusiva antiga, descartada)", () => {
-    expect(obterSubcategorias("IEZ", "Dia de Integração")).toEqual([]);
-    expect(obterSubcategorias("NOKIA", "Dia de Integração")).toEqual([]);
+  it("retorna as subcategorias de Instalação", () => {
+    expect(obterSubcategorias("Instalação")).toEqual(["Orientação sobre o Projeto", "Padrão de Instalação", "Hardware", "Ferramentas"]);
   });
 
-  it("retorna lista vazia para Projeto/Categoria inexistente, vazia, ou de uma matriz anterior", () => {
-    expect(obterSubcategorias("ZTE", "X - NÃO EXISTE")).toEqual([]);
-    expect(obterSubcategorias(null, "MOS")).toEqual([]);
-    expect(obterSubcategorias("NOKIA", null)).toEqual([]);
+  it("retorna as subcategorias de Ativação", () => {
+    expect(obterSubcategorias("Ativação")).toEqual([
+      "Configuração",
+      "Alarmes",
+      "Atualização SW",
+      "Script / XML",
+      "Orientação",
+    ]);
+  });
+
+  it("retorna as subcategorias de Aceitação (mantida intacta desta missão)", () => {
+    expect(obterSubcategorias("Aceitação")).toEqual([
+      "Teste de Voz / Dados",
+      "Alarmes",
+      "Documentação / Relatório Fotográfico",
+      "RSA Claro",
+      "Log Depois",
+    ]);
+  });
+
+  it("retorna lista vazia para Categoria Principal inexistente, vazia ou nula", () => {
+    expect(obterSubcategorias("CATEGORIA-FANTASMA")).toEqual([]);
+    expect(obterSubcategorias(null)).toEqual([]);
+    expect(obterSubcategorias(undefined)).toEqual([]);
+    expect(obterSubcategorias("")).toEqual([]);
   });
 });
 
 describe("obterDetalhamentos", () => {
-  it("IEZ > MOS > Material tem os mesmos detalhamentos que qualquer outro projeto > MOS > Material", () => {
-    expect(obterDetalhamentos("IEZ", "MOS", "Material")).toEqual(["OK", "NOK"]);
-    expect(obterDetalhamentos("NOKIA", "MOS", "Material")).toEqual(["OK", "NOK"]);
+  it("MOS > EHS tem detalhamentos Aplicativos/Orientações", () => {
+    expect(obterDetalhamentos("MOS", "EHS")).toEqual(["Aplicativos", "Orientações"]);
   });
 
-  it("IEZ > Ativação > Configuração tem 'Controladora' (exemplo válido oficial da missão)", () => {
-    expect(obterDetalhamentos("IEZ", "Ativação", "Configuração")).toEqual([
-      "Controladora",
-      "Periféricos",
-      "Energia",
-    ]);
+  it("MOS > Material tem detalhamentos OK/NOK", () => {
+    expect(obterDetalhamentos("MOS", "Material")).toEqual(["OK", "NOK"]);
   });
 
-  it("retorna os detalhamentos de HUAWEI > Infraestrutura > Sistema Irradiante", () => {
-    expect(obterDetalhamentos("HUAWEI", "Infraestrutura", "Sistema Irradiante")).toEqual([
-      "Suporte",
-      "Falta de Infraestrutura",
-      "Esteiramento Horizontal / Vertical",
-    ]);
+  it("a maioria das subcategorias de MOS não tem detalhamento (lista vazia)", () => {
+    expect(obterDetalhamentos("MOS", "Log de Antes")).toEqual([]);
+    expect(obterDetalhamentos("MOS", "Logística / Transportadora")).toEqual([]);
+    expect(obterDetalhamentos("MOS", "Aplicativos")).toEqual([]);
+    expect(obterDetalhamentos("MOS", "Orientação")).toEqual([]);
   });
 
-  it("retorna os detalhamentos de HUAWEI > Aceitação > Documentação / Relatório Fotográfico (exemplo válido oficial da missão)", () => {
-    expect(obterDetalhamentos("HUAWEI", "Aceitação", "Documentação / Relatório Fotográfico")).toEqual([
-      "QC",
-      "RFA",
-    ]);
+  it("Infraestrutura > Fibra Óptica tem detalhamentos Alarmes/FO NOK", () => {
+    expect(obterDetalhamentos("Infraestrutura", "Fibra Óptica")).toEqual(["Alarmes", "FO NOK"]);
   });
 
-  it("retorna os detalhamentos de NOKIA > Infraestrutura > Fibra Óptica (exemplo válido oficial da missão)", () => {
-    expect(obterDetalhamentos("NOKIA", "Infraestrutura", "Fibra Óptica")).toEqual(["Alarmes", "FO NOK"]);
+  it("Instalação > Hardware é a única subcategoria de Instalação com detalhamento", () => {
+    expect(obterDetalhamentos("Instalação", "Hardware")).toEqual(["Avarias", "Falhas"]);
+    expect(obterDetalhamentos("Instalação", "Orientação sobre o Projeto")).toEqual([]);
+    expect(obterDetalhamentos("Instalação", "Padrão de Instalação")).toEqual([]);
+    expect(obterDetalhamentos("Instalação", "Ferramentas")).toEqual([]);
   });
 
-  it("retorna lista vazia quando a subcategoria não pertence à combinação Projeto+Categoria informada", () => {
-    expect(obterDetalhamentos("IEZ", "MOS", "Sistema Irradiante")).toEqual([]);
+  it("Ativação > Configuração e Ativação > Alarmes têm detalhamento; as demais subcategorias de Ativação não têm", () => {
+    expect(obterDetalhamentos("Ativação", "Configuração")).toEqual(["Controladora", "Periféricos", "Energia"]);
+    expect(obterDetalhamentos("Ativação", "Alarmes")).toEqual(["Configuração", "Teste Físico"]);
+    expect(obterDetalhamentos("Ativação", "Atualização SW")).toEqual([]);
+    expect(obterDetalhamentos("Ativação", "Script / XML")).toEqual([]);
+    expect(obterDetalhamentos("Ativação", "Orientação")).toEqual([]);
+  });
+
+  it("Aceitação > Documentação / Relatório Fotográfico tem detalhamentos QC/RFA (mantido intacto)", () => {
+    expect(obterDetalhamentos("Aceitação", "Documentação / Relatório Fotográfico")).toEqual(["QC", "RFA"]);
+  });
+
+  it("retorna lista vazia quando a subcategoria não pertence à Categoria Principal informada", () => {
+    expect(obterDetalhamentos("MOS", "Sistema Irradiante")).toEqual([]);
   });
 
   it("retorna lista vazia para combinação inexistente ou vazia", () => {
-    expect(obterDetalhamentos("NOKIA", "MOS", null)).toEqual([]);
-    expect(obterDetalhamentos("NOKIA", null, "Material")).toEqual([]);
-    expect(obterDetalhamentos(null, "MOS", "Material")).toEqual([]);
+    expect(obterDetalhamentos("MOS", null)).toEqual([]);
+    expect(obterDetalhamentos(null, "Material")).toEqual([]);
   });
 });
 
 describe("validarClassificacaoSuporte", () => {
-  it("IEZ aceita MOS > Material > NOK (exemplo válido oficial da missão)", () => {
+  it("aceita MOS > Material > NOK", () => {
     const resultado = validarClassificacaoSuporte({
-      projeto: "IEZ",
       categoriaPrincipal: "MOS",
       subcategoria: "Material",
       detalhamento: "NOK",
@@ -141,9 +146,8 @@ describe("validarClassificacaoSuporte", () => {
     expect(resultado.valido).toBe(true);
   });
 
-  it("IEZ aceita Ativação > Configuração > Controladora (exemplo válido oficial da missão)", () => {
+  it("aceita Ativação > Configuração > Controladora", () => {
     const resultado = validarClassificacaoSuporte({
-      projeto: "IEZ",
       categoriaPrincipal: "Ativação",
       subcategoria: "Configuração",
       detalhamento: "Controladora",
@@ -151,9 +155,8 @@ describe("validarClassificacaoSuporte", () => {
     expect(resultado.valido).toBe(true);
   });
 
-  it("aceita NOKIA > Infraestrutura > Fibra Óptica > FO NOK (exemplo válido oficial da missão)", () => {
+  it("aceita Infraestrutura > Fibra Óptica > FO NOK", () => {
     const resultado = validarClassificacaoSuporte({
-      projeto: "NOKIA",
       categoriaPrincipal: "Infraestrutura",
       subcategoria: "Fibra Óptica",
       detalhamento: "FO NOK",
@@ -161,9 +164,8 @@ describe("validarClassificacaoSuporte", () => {
     expect(resultado.valido).toBe(true);
   });
 
-  it("aceita HUAWEI > Aceitação > Documentação / Relatório Fotográfico > QC (exemplo válido oficial da missão)", () => {
+  it("aceita Aceitação > Documentação / Relatório Fotográfico > QC", () => {
     const resultado = validarClassificacaoSuporte({
-      projeto: "HUAWEI",
       categoriaPrincipal: "Aceitação",
       subcategoria: "Documentação / Relatório Fotográfico",
       detalhamento: "QC",
@@ -171,9 +173,15 @@ describe("validarClassificacaoSuporte", () => {
     expect(resultado.valido).toBe(true);
   });
 
-  it("aceita apenas o Projeto, sem Categoria Principal (qualquer um dos 5 projetos)", () => {
-    expect(validarClassificacaoSuporte({ projeto: "IEZ" }).valido).toBe(true);
-    expect(validarClassificacaoSuporte({ projeto: "ZTE" }).valido).toBe(true);
+  it("aceita apenas a Categoria Principal, sem Subcategoria", () => {
+    expect(validarClassificacaoSuporte({ categoriaPrincipal: "MOS" }).valido).toBe(true);
+    expect(validarClassificacaoSuporte({ categoriaPrincipal: "Instalação" }).valido).toBe(true);
+  });
+
+  it("aceita subcategoria sem detalhamento quando a subcategoria não tem detalhamentos", () => {
+    expect(
+      validarClassificacaoSuporte({ categoriaPrincipal: "MOS", subcategoria: "Log de Antes" }).valido
+    ).toBe(true);
   });
 
   it("aceita tudo vazio (nenhuma nova classificação escolhida — preserva legado na edição)", () => {
@@ -181,24 +189,13 @@ describe("validarClassificacaoSuporte", () => {
     expect(resultado.valido).toBe(true);
   });
 
-  it("rejeita a categoria exclusiva antiga do IEZ ('Dia de Integração') — foi completamente descartada", () => {
-    const resultado = validarClassificacaoSuporte({ projeto: "IEZ", categoriaPrincipal: "Dia de Integração" });
-    expect(resultado.valido).toBe(false);
-    if (!resultado.valido) expect(resultado.erro).toContain("não pertence ao Projeto");
-  });
-
-  it("rejeita qualquer subcategoria exclusiva antiga do IEZ (ex.: 'Treinamentos TELEQUIPE') sob a categoria 'Dia de Integração'", () => {
-    const resultado = validarClassificacaoSuporte({
-      projeto: "IEZ",
-      categoriaPrincipal: "Dia de Integração",
-      subcategoria: "Treinamentos TELEQUIPE",
-    });
+  it("rejeita Categoria Principal desconhecida", () => {
+    const resultado = validarClassificacaoSuporte({ categoriaPrincipal: "CATEGORIA-FANTASMA" });
     expect(resultado.valido).toBe(false);
   });
 
-  it("rejeita combinação inválida de categoria/subcategoria (IEZ + MOS + Sistema Irradiante)", () => {
+  it("rejeita combinação inválida de categoria/subcategoria (MOS + Sistema Irradiante)", () => {
     const resultado = validarClassificacaoSuporte({
-      projeto: "IEZ",
       categoriaPrincipal: "MOS",
       subcategoria: "Sistema Irradiante",
     });
@@ -206,9 +203,8 @@ describe("validarClassificacaoSuporte", () => {
     if (!resultado.valido) expect(resultado.erro).toContain("não pertence");
   });
 
-  it("rejeita detalhamento fora da subcategoria (NOKIA + MOS + Material + Controladora)", () => {
+  it("rejeita detalhamento fora da subcategoria (MOS + Material + Controladora)", () => {
     const resultado = validarClassificacaoSuporte({
-      projeto: "NOKIA",
       categoriaPrincipal: "MOS",
       subcategoria: "Material",
       detalhamento: "Controladora",
@@ -216,118 +212,89 @@ describe("validarClassificacaoSuporte", () => {
     expect(resultado.valido).toBe(false);
   });
 
-  it("rejeita Projeto desconhecido", () => {
-    const resultado = validarClassificacaoSuporte({ projeto: "PROJETO-FANTASMA" });
-    expect(resultado.valido).toBe(false);
-  });
-
-  it("rejeita Categoria Principal preenchida sem Projeto", () => {
-    const resultado = validarClassificacaoSuporte({ categoriaPrincipal: "MOS" });
-    expect(resultado.valido).toBe(false);
-  });
-
-  it("rejeita subcategoria/detalhamento preenchidos sem Categoria Principal", () => {
-    const resultado = validarClassificacaoSuporte({ projeto: "NOKIA", subcategoria: "Material" });
+  it("rejeita Subcategoria/Detalhamento preenchidos sem Categoria Principal", () => {
+    const resultado = validarClassificacaoSuporte({ subcategoria: "Material" });
     expect(resultado.valido).toBe(false);
   });
 
   it("rejeita detalhamento preenchido sem subcategoria", () => {
     const resultado = validarClassificacaoSuporte({
-      projeto: "NOKIA",
       categoriaPrincipal: "MOS",
       detalhamento: "OK",
+    });
+    expect(resultado.valido).toBe(false);
+  });
+
+  it("rejeita detalhamento em subcategoria que não tem nenhum detalhamento (MOS + Log de Antes + qualquer coisa)", () => {
+    const resultado = validarClassificacaoSuporte({
+      categoriaPrincipal: "MOS",
+      subcategoria: "Log de Antes",
+      detalhamento: "Qualquer",
     });
     expect(resultado.valido).toBe(false);
   });
 });
 
 describe("formatarCategoriaHierarquica", () => {
-  it("junta os 4 níveis com ' > ' para o Projeto IEZ igual a qualquer outro projeto", () => {
+  it("junta os 3 níveis com ' > '", () => {
     expect(
       formatarCategoriaHierarquica({
-        projeto: "IEZ",
         categoriaPrincipal: "MOS",
         subcategoria: "Material",
         detalhamento: "NOK",
       })
-    ).toBe("IEZ > MOS > Material > NOK");
+    ).toBe("MOS > Material > NOK");
   });
 
   it("omite níveis vazios", () => {
-    expect(formatarCategoriaHierarquica({ projeto: "IEZ" })).toBe("IEZ");
+    expect(formatarCategoriaHierarquica({ categoriaPrincipal: "MOS" })).toBe("MOS");
     expect(
-      formatarCategoriaHierarquica({ projeto: "ZTE", categoriaPrincipal: "Ativação", subcategoria: "Script / XML" })
-    ).toBe("ZTE > Ativação > Script / XML");
+      formatarCategoriaHierarquica({ categoriaPrincipal: "Ativação", subcategoria: "Script / XML" })
+    ).toBe("Ativação > Script / XML");
+    expect(formatarCategoriaHierarquica({})).toBe("");
   });
 });
 
-describe("combinarProjetoCategoria — codificação para a coluna categoriaPrincipal (sem alterar o schema)", () => {
-  it("devolve null quando nenhum Projeto foi escolhido", () => {
-    expect(combinarProjetoCategoria(null, null)).toBeNull();
-    expect(combinarProjetoCategoria(undefined, "MOS")).toBeNull();
+describe("categoriaPrincipalValida — único mecanismo de compatibilidade com registros antigos", () => {
+  it("reconhece cada uma das 5 Categorias Principais atuais", () => {
+    for (const nome of obterCategoriasPrincipais()) {
+      expect(categoriaPrincipalValida(nome)).toBe(nome);
+    }
   });
 
-  it("devolve o Projeto puro quando só ele foi escolhido", () => {
-    expect(combinarProjetoCategoria("IEZ", null)).toBe("IEZ");
+  it("devolve null para valor vazio/nulo/indefinido (nunca classificado)", () => {
+    expect(categoriaPrincipalValida(null)).toBeNull();
+    expect(categoriaPrincipalValida(undefined)).toBeNull();
+    expect(categoriaPrincipalValida("")).toBeNull();
   });
 
-  it("devolve o composto 'Projeto > Categoria' quando os dois foram escolhidos, igual para IEZ e para os demais projetos", () => {
-    expect(combinarProjetoCategoria("IEZ", "MOS")).toBe("IEZ > MOS");
-    expect(combinarProjetoCategoria("NOKIA", "MOS")).toBe("NOKIA > MOS");
-  });
-});
-
-describe("interpretarCategoriaPrincipalPersistida — decodificação, só reconhece a matriz atual", () => {
-  it("decodifica um Projeto puro salvo (só Projeto escolhido) — inclusive IEZ", () => {
-    expect(interpretarCategoriaPrincipalPersistida("IEZ")).toEqual({ projeto: "IEZ", categoriaPrincipal: null });
-  });
-
-  it("decodifica um composto válido 'IEZ > Categoria' igual a qualquer outro projeto", () => {
-    expect(interpretarCategoriaPrincipalPersistida("IEZ > MOS")).toEqual({
-      projeto: "IEZ",
-      categoriaPrincipal: "MOS",
-    });
-    expect(interpretarCategoriaPrincipalPersistida("NOKIA > MOS")).toEqual({
-      projeto: "NOKIA",
-      categoriaPrincipal: "MOS",
-    });
-  });
-
-  it("devolve null para valor vazio/nulo (nunca classificado)", () => {
-    expect(interpretarCategoriaPrincipalPersistida(null)).toBeNull();
-    expect(interpretarCategoriaPrincipalPersistida(undefined)).toBeNull();
-    expect(interpretarCategoriaPrincipalPersistida("")).toBeNull();
-  });
-
-  it("devolve null para uma Categoria Principal 'solta' de uma matriz anterior (sem Projeto, ex.: 'MOS' sozinho)", () => {
-    expect(interpretarCategoriaPrincipalPersistida("MOS")).toBeNull();
-  });
-
-  it("devolve null para 'IEZ > Dia de Integração' — a estrutura EXCLUSIVA que o IEZ chegou a ter na primeira versão desta revisão, agora completamente descartada", () => {
-    expect(interpretarCategoriaPrincipalPersistida("IEZ > Dia de Integração")).toBeNull();
+  it("devolve null para um valor da matriz anterior com Projeto/Fabricante embutido (ex.: 'NOKIA', 'NOKIA > MOS')", () => {
+    expect(categoriaPrincipalValida("NOKIA")).toBeNull();
+    expect(categoriaPrincipalValida("NOKIA > MOS")).toBeNull();
+    expect(categoriaPrincipalValida("IEZ > Dia de Integração")).toBeNull();
   });
 
   it("devolve null para qualquer valor de uma matriz ainda mais antiga (ex.: '3 - ATIVAÇÃO')", () => {
-    expect(interpretarCategoriaPrincipalPersistida("3 - ATIVAÇÃO")).toBeNull();
+    expect(categoriaPrincipalValida("3 - ATIVAÇÃO")).toBeNull();
   });
 
-  it("devolve null para um Projeto inexistente combinado com qualquer Categoria", () => {
-    expect(interpretarCategoriaPrincipalPersistida("PROJETO-FANTASMA > MOS")).toBeNull();
+  it("devolve null para uma Categoria Principal desconhecida", () => {
+    expect(categoriaPrincipalValida("CATEGORIA-FANTASMA")).toBeNull();
   });
 });
 
 describe("obterRotuloCategoriaExibicao — compatibilidade com registros antigos (histórico intacto)", () => {
-  it("usa a hierarquia nova completa quando categoriaPrincipal é decodificável, para IEZ igual a qualquer outro projeto", () => {
+  it("usa a hierarquia nova completa quando categoriaPrincipal é uma das 5 Categorias atuais", () => {
     const texto = obterRotuloCategoriaExibicao({
-      categoriaPrincipal: "IEZ > MOS",
+      categoriaPrincipal: "MOS",
       subcategoria: "Material",
       detalhamento: "NOK",
-      categoria: "IEZ > MOS > Material > NOK",
+      categoria: "MOS > Material > NOK",
     });
-    expect(texto).toBe("IEZ > MOS > Material > NOK");
+    expect(texto).toBe("MOS > Material > NOK");
   });
 
-  it("cai para o categoria legado quando nunca houve classificação hierárquica", () => {
+  it("cai para o texto legado quando categoriaPrincipal nunca foi classificado", () => {
     const texto = obterRotuloCategoriaExibicao({
       categoriaPrincipal: null,
       subcategoria: null,
@@ -337,14 +304,14 @@ describe("obterRotuloCategoriaExibicao — compatibilidade com registros antigos
     expect(texto).toBe("MOS");
   });
 
-  it("um atendimento criado durante a implementação anterior do IEZ (estrutura exclusiva 'Dia de Integração') continua exibindo seu texto legado intacto — não é migrado nem apagado", () => {
+  it("um atendimento salvo com a matriz anterior (Fabricante embutido, ex.: 'NOKIA > MOS') continua exibindo seu texto legado intacto — não é migrado nem apagado", () => {
     const texto = obterRotuloCategoriaExibicao({
-      categoriaPrincipal: "IEZ > Dia de Integração",
-      subcategoria: "Treinamentos TELEQUIPE",
-      detalhamento: "Geral",
-      categoria: "IEZ > Dia de Integração > Treinamentos TELEQUIPE > Geral",
+      categoriaPrincipal: "NOKIA > MOS",
+      subcategoria: "Material",
+      detalhamento: "NOK",
+      categoria: "NOKIA > MOS > Material > NOK",
     });
-    expect(texto).toBe("IEZ > Dia de Integração > Treinamentos TELEQUIPE > Geral");
+    expect(texto).toBe("NOKIA > MOS > Material > NOK");
   });
 
   it("um atendimento salvo com uma matriz ainda mais antiga (ex.: '3 - ATIVAÇÃO') continua exibindo seu texto legado intacto", () => {
@@ -359,28 +326,50 @@ describe("obterRotuloCategoriaExibicao — compatibilidade com registros antigos
 });
 
 describe("obterClassificacaoAtualValida — reconstrói os defaults do formulário de edição", () => {
-  it("reconstrói Projeto + Categoria + Subcategoria + Detalhamento de um atendimento IEZ novo, totalmente classificado", () => {
+  it("reconstrói Categoria + Subcategoria + Detalhamento de um atendimento novo, totalmente classificado", () => {
     expect(
       obterClassificacaoAtualValida({
-        categoriaPrincipal: "IEZ > MOS",
+        categoriaPrincipal: "MOS",
         subcategoria: "Material",
         detalhamento: "NOK",
       })
-    ).toEqual({ projeto: "IEZ", categoriaPrincipal: "MOS", subcategoria: "Material", detalhamento: "NOK" });
+    ).toEqual({ categoriaPrincipal: "MOS", subcategoria: "Material", detalhamento: null });
   });
 
-  it("devolve null para um atendimento criado durante a implementação anterior do IEZ (estrutura exclusiva, agora legada)", () => {
+  it("aceita subcategoria válida sem detalhamento (subcategoria sem detalhamentos, ex.: MOS > Log de Antes)", () => {
     expect(
       obterClassificacaoAtualValida({
-        categoriaPrincipal: "IEZ > Dia de Integração",
-        subcategoria: "Treinamentos TELEQUIPE",
-        detalhamento: "Geral",
+        categoriaPrincipal: "MOS",
+        subcategoria: "Log de Antes",
+        detalhamento: null,
+      })
+    ).toEqual({ categoriaPrincipal: "MOS", subcategoria: "Log de Antes", detalhamento: null });
+  });
+
+  it("descarta um detalhamento salvo que não pertence mais à combinação atual", () => {
+    expect(
+      obterClassificacaoAtualValida({
+        categoriaPrincipal: "MOS",
+        subcategoria: "Log de Antes",
+        detalhamento: "Qualquer",
+      })
+    ).toEqual({ categoriaPrincipal: "MOS", subcategoria: "Log de Antes", detalhamento: null });
+  });
+
+  it("devolve null para um atendimento salvo com a matriz anterior (Fabricante embutido, ex.: 'NOKIA > MOS'), agora legado", () => {
+    expect(
+      obterClassificacaoAtualValida({
+        categoriaPrincipal: "NOKIA > MOS",
+        subcategoria: "Material",
+        detalhamento: "NOK",
       })
     ).toBeNull();
   });
 
   it("devolve null para um atendimento nunca classificado ou classificado por uma matriz ainda mais antiga", () => {
-    expect(obterClassificacaoAtualValida({ categoriaPrincipal: null, subcategoria: null, detalhamento: null })).toBeNull();
+    expect(
+      obterClassificacaoAtualValida({ categoriaPrincipal: null, subcategoria: null, detalhamento: null })
+    ).toBeNull();
     expect(
       obterClassificacaoAtualValida({ categoriaPrincipal: "3 - ATIVAÇÃO", subcategoria: null, detalhamento: null })
     ).toBeNull();

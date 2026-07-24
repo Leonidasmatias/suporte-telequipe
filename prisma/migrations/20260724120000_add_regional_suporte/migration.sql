@@ -1,0 +1,26 @@
+-- MISSAO: "TELEQUIPE SUPORTE STA - Evolucao 7.1" - relacao oficial Projeto x
+-- Regional (lib/projetoRegional.ts).
+--
+-- Adiciona 1 coluna opcional (nullable) ao SupportTicket para persistir a
+-- Regional validada contra a matriz oficial.
+--
+-- Migration puramente aditiva:
+--   - Sem DROP COLUMN.
+--   - Sem RENAME (destrutivo ou nao).
+--   - Sem valor DEFAULT obrigatorio / NOT NULL.
+--   - Sem TRUNCATE, sem recriacao de tabela, sem reset de banco.
+--
+-- Nenhuma coluna existente (incluindo "projeto", "categoriaPrincipal",
+-- "subcategoria", "detalhamento") e tocada por esta migration. Atendimentos
+-- antigos ficam com "regional" em NULL e continuam aparecendo normalmente,
+-- classificados como "Regional nao classificada" no Dashboard Executivo (ver
+-- lib/projetoRegional.ts / lib/dashboardSuporte.ts).
+--
+-- Escrita manualmente (sem conexao com o banco real neste ambiente) seguindo
+-- a mesma convencao ja usada nas migrations anteriores deste projeto
+-- (20260722160000_add_categoria_hierarquica, 20260722180000_add_usuario_responsavel_suporte).
+-- Deve ser aplicada com `npx prisma migrate deploy` a partir de uma maquina
+-- com acesso a DATABASE_URL real -- nenhum comando foi executado contra o
+-- banco de producao a partir desta sessao.
+
+ALTER TABLE "support_tickets" ADD COLUMN "regional" TEXT;

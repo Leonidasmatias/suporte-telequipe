@@ -3,9 +3,11 @@ import { prisma } from "@/lib/prisma";
 import PageHeader from "@/components/PageHeader";
 import TempoAtendimentoInputs from "@/components/TempoAtendimentoInputs";
 import SeletorCategoriaSuporte from "@/components/SeletorCategoriaSuporte";
+import SeletorProjetoRegional from "@/components/SeletorProjetoRegional";
 import { updateTicket, closeTicket, deleteTicket } from "../actions";
 import { TIPOS_ATENDIMENTO, RESULTADOS_SUPORTE, STATUS_SUPORTE } from "@/lib/suporte";
 import { obterClassificacaoAtualValida } from "@/lib/categoriasSuporte";
+import { normalizarProjeto, normalizarRegional } from "@/lib/projetoRegional";
 import { ACOES, RECURSOS, canPerform, requireAccess, criarFiltroDeAcessoAtendimentos } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +62,18 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
   const classificacaoAtual = obterClassificacaoAtualValida(ticket);
   const categoriaAtualValida = classificacaoAtual !== null;
 
+  // Missão "TELEQUIPE SUPORTE STA — Evolução 7.1": `ticket.projeto` pode ser
+  // texto livre legado (ex.: "Expansão 5G Regional Sul", registrado antes
+  // desta missão) que não corresponde a nenhum dos 7 Projetos oficiais da
+  // matriz Projeto x Regional. Nesse caso, o <select> abaixo não deve tentar
+  // pré-selecionar um valor que não existe entre suas opções — passamos
+  // string vazia (equivalente a "categoria legada" em
+  // SeletorCategoriaSuporte), preservando o valor legado 100% intacto no
+  // banco (nada é sobrescrito a menos que o usuário escolha um Projeto
+  // oficial e salve).
+  const projetoOficialAtual = normalizarProjeto(ticket.projeto) ?? "";
+  const regionalAtual = projetoOficialAtual ? normalizarRegional(ticket.regional) ?? "" : "";
+
   return (
     <div>
       <PageHeader
@@ -104,8 +118,8 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="sm:col-span-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
             <label className="label-field">Colaborador</label>
             <select name="colaborador_id" className="input-field" defaultValue={ticket.colaboradorId ?? ""}>
               <option value="">Não informado</option>
@@ -115,10 +129,6 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
                 </option>
               ))}
             </select>
-          </div>
-          <div>
-            <label className="label-field">Projeto</label>
-            <input name="projeto" defaultValue={ticket.projeto ?? ""} className="input-field" />
           </div>
           <div>
             <label className="label-field">Cliente</label>
@@ -163,8 +173,22 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
           </div>
         </div>
 
-        <div>
+        {/* Missão "Unificação visual Projeto/Regional no bloco Categoria do
+            atendimento": Projeto e Regional (matriz oficial, ver
+            lib/projetoRegional.ts) foram trazidos para dentro deste mesmo
+            bloco, antes da Categoria/Subcategoria/Detalhamento, na ordem
+            exigida — sem duplicar os campos e sem alterar a validação de
+            nenhum dos dois (ambas continuam em app/suporte/actions.ts,
+            inalteradas). O aviso de "Categoria legada" mantém a mesma
+            posição relativa: imediatamente antes de SeletorCategoriaSuporte. */}
+        <div className="rounded-lg border border-graphite-800 p-4">
           <p className="label-field mb-1">Categoria do atendimento</p>
+          <p className="mb-4 text-xs text-graphite-500">
+            Selecione primeiro o Projeto e a Regional para depois informar a Categoria, Subcategoria e Detalhamento.
+          </p>
+          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <SeletorProjetoRegional projetoDefault={projetoOficialAtual} regionalDefault={regionalAtual} />
+          </div>
           {!categoriaAtualValida && (
             <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               <span className="font-semibold">Categoria legada:</span> {ticket.categoria}
@@ -178,7 +202,6 @@ export default async function DetalheAtendimentoPage({ params }: { params: { id:
             </div>
           )}
           <SeletorCategoriaSuporte
-            projetoDefault={classificacaoAtual?.projeto ?? ""}
             categoriaPrincipalDefault={classificacaoAtual?.categoriaPrincipal ?? ""}
             subcategoriaDefault={classificacaoAtual?.subcategoria ?? ""}
             detalhamentoDefault={classificacaoAtual?.detalhamento ?? ""}

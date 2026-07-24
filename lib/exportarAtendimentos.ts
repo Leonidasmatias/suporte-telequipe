@@ -4,7 +4,7 @@ import {
   STATUS_SUPORTE,
   type FiltrosSuporte,
 } from "@/lib/suporte";
-import { interpretarCategoriaPrincipalPersistida } from "@/lib/categoriasSuporte";
+import { categoriaPrincipalValida } from "@/lib/categoriasSuporte";
 
 /**
  * Exportação em Excel (.xlsx) da tela /suporte ("Suporte Técnico").
@@ -152,9 +152,6 @@ export function validarFiltrosExportacao(
 
   const site = textoLivreSeguro(params.get("site"));
   if (site) filtros.site = site;
-
-  const categoriaProjeto = textoLivreSeguro(params.get("categoria_projeto"));
-  if (categoriaProjeto) filtros.categoriaProjeto = categoriaProjeto;
 
   const categoriaPrincipal = textoLivreSeguro(params.get("categoria_principal"));
   if (categoriaPrincipal) filtros.categoriaPrincipal = categoriaPrincipal;
@@ -348,7 +345,6 @@ export const COLUNAS_ATENDIMENTOS = [
   "Projeto",
   "Site",
   "Cliente",
-  "Projeto (Categoria)",
   "Categoria Principal",
   "Subcategoria",
   "Detalhamento",
@@ -362,7 +358,7 @@ export const COLUNAS_ATENDIMENTOS = [
 ] as const;
 
 /**
- * Monta uma linha (19 valores, na ordem de `COLUNAS_ATENDIMENTOS`) já sanitizada.
+ * Monta uma linha (21 valores, na ordem de `COLUNAS_ATENDIMENTOS`) já sanitizada.
  *
  * "Data/Hora de encerramento": não existe timestamp de encerramento na
  * tabela. Quando `status === "Finalizado"`, usamos `updatedAt` (atualizado
@@ -377,34 +373,39 @@ export const COLUNAS_ATENDIMENTOS = [
  * de sempre, `t.cliente`, sem nenhuma mudança de valor ou lógica) continua
  * exatamente como era.
  *
- * "Projeto (Categoria)" / "Categoria Principal" / "Subcategoria" /
- * "Detalhamento" (4 colunas, substituindo a antiga coluna única "Categoria"
- * — decisão já validada em missões anteriores: nenhuma coluna existente é
- * removida da planilha, apenas a representação da categoria ganha mais
- * colunas, na mesma posição). "Projeto (Categoria)" é a NOVA missão v7.1: o
- * topo da hierarquia (IEZ/ERICSSON/HUAWEI/NOKIA/ZTE) — nome escolhido de
- * propósito para nunca ser confundido com a coluna "Projeto" já existente
- * (nome de projeto do cliente, texto livre, campo `SupportTicket.projeto`).
+ * "Categoria Principal" / "Subcategoria" / "Detalhamento" (3 colunas,
+ * substituindo a antiga coluna única "Categoria" — decisão já validada em
+ * missões anteriores: nenhuma coluna existente é removida da planilha sem
+ * necessidade, apenas a representação da categoria ganha mais colunas, na
+ * mesma posição).
  *
- * Como a tabela não tem uma coluna dedicada para esse "Projeto" novo, ele é
- * decodificado a partir da própria coluna `categoriaPrincipal` (ver
- * `interpretarCategoriaPrincipalPersistida` em lib/categoriasSuporte.ts):
- *  - Quando decodificável (atendimento novo, classificado pela matriz
- *    atual): "Projeto (Categoria)" recebe o Projeto decodificado e
- *    "Categoria Principal" recebe a Categoria Principal decodificada (ou
- *    fica vazia, se só o Projeto tiver sido escolhido).
- *  - Quando NÃO decodificável (atendimento nunca classificado, ou
- *    classificado por uma matriz anterior — sem o conceito de Projeto):
- *    "Projeto (Categoria)" fica vazia e "Categoria Principal" recebe o valor
- *    legado (`categoriaPrincipal` bruto se existir, senão `categoria`) —
- *    mesmo comportamento de fallback já usado antes desta missão, preservado
- *    sem alteração para não mexer no histórico. "Subcategoria" e
- *    "Detalhamento" ficam vazios nesse caso (mesmo padrão de célula vazia já
- *    usado para qualquer outro campo opcional ausente).
+ * MISSÃO "Refatoração da Categoria do Atendimento — eliminação do campo
+ * Projeto duplicado" (v7.3): a coluna "Projeto (Categoria)" (introduzida na
+ * v7.1 para o antigo nível "Projeto" por Fabricante — IEZ/ERICSSON/HUAWEI/
+ * NOKIA/ZTE — da hierarquia de categorias) foi REMOVIDA desta exportação —
+ * decisão explícita do usuário de eliminar a dimensão Fabricante de filtros/
+ * dashboard/exportação. A coluna "Projeto" que permanece na planilha
+ * (posição inalterada) sempre foi e continua sendo só a do cliente, texto
+ * livre, campo `SupportTicket.projeto` — a partir de missões anteriores,
+ * populada pela matriz oficial Projeto × Regional.
+ *
+ * "Categoria Principal" usa `categoriaPrincipalValida` (lib/categoriasSuporte.ts)
+ * para decidir a fonte do valor:
+ *  - Quando `categoriaPrincipal` é uma das 5 Categorias Principais atuais
+ *    (atendimento novo, classificado pela matriz atual): "Categoria
+ *    Principal" recebe esse valor.
+ *  - Quando NÃO é (atendimento nunca classificado, ou classificado por uma
+ *    matriz anterior — com ou sem Projeto/Fabricante embutido, ex.:
+ *    "NOKIA > MOS"): "Categoria Principal" recebe o valor legado
+ *    (`categoriaPrincipal` bruto se existir, senão `categoria`) — mesmo
+ *    comportamento de fallback já usado antes desta missão, preservado sem
+ *    alteração para não mexer no histórico. "Subcategoria" e "Detalhamento"
+ *    ficam vazios nesse caso (mesmo padrão de célula vazia já usado para
+ *    qualquer outro campo opcional ausente).
  */
 export function montarLinhaPlanilha(t: AtendimentoParaExportacao): Array<string | number | Date> {
   const finalizado = t.status === "Finalizado";
-  const decodificado = interpretarCategoriaPrincipalPersistida(t.categoriaPrincipal);
+  const categoriaValida = categoriaPrincipalValida(t.categoriaPrincipal);
   return [
     t.numero,
     t.dataAtendimento,
@@ -417,8 +418,7 @@ export function montarLinhaPlanilha(t: AtendimentoParaExportacao): Array<string 
     sanitizarCelulaTexto(t.projeto),
     sanitizarCelulaTexto(t.site),
     sanitizarCelulaTexto(t.cliente),
-    sanitizarCelulaTexto(decodificado?.projeto ?? ""),
-    sanitizarCelulaTexto(decodificado ? decodificado.categoriaPrincipal ?? "" : t.categoriaPrincipal || t.categoria),
+    sanitizarCelulaTexto(categoriaValida ?? (t.categoriaPrincipal || t.categoria)),
     sanitizarCelulaTexto(t.subcategoria),
     sanitizarCelulaTexto(t.detalhamento),
     sanitizarCelulaTexto(t.descricaoProblema),
@@ -447,7 +447,6 @@ const LARGURAS_COLUNAS: Record<(typeof COLUNAS_ATENDIMENTOS)[number], number> = 
   Projeto: 20,
   Site: 20,
   Cliente: 20,
-  "Projeto (Categoria)": 20,
   "Categoria Principal": 22,
   Subcategoria: 24,
   Detalhamento: 24,

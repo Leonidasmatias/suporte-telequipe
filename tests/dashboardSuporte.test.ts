@@ -39,6 +39,7 @@ const {
   SLA_PADRAO_HORAS,
   PERIODO_PADRAO,
   FUSO_HORARIO_PADRAO,
+  calcularChamadosPorProjetoRegional,
 } = await import("@/lib/dashboardSuporte");
 
 type TicketFixture = {
@@ -52,6 +53,9 @@ type TicketFixture = {
   createdAt: Date;
   updatedAt: Date;
   colaborador: { regional: string | null } | null;
+  /** Missão "Evolução 7.1" — Projeto/Regional do PRÓPRIO chamado (matriz oficial), distintos do Regional do Colaborador acima. */
+  projeto: string | null;
+  regional: string | null;
 };
 
 function ticket(overrides: Partial<TicketFixture> = {}): TicketFixture {
@@ -66,6 +70,8 @@ function ticket(overrides: Partial<TicketFixture> = {}): TicketFixture {
     createdAt: new Date("2026-01-10T00:00:00Z"),
     updatedAt: new Date("2026-01-10T00:00:00Z"),
     colaborador: null,
+    projeto: null,
+    regional: null,
     ...overrides,
   };
 }
@@ -99,13 +105,6 @@ describe("getIndicadoresExecutivosSuporte — base vazia", () => {
     expect(dados.tempoMedioResolucaoMinutos).toBeNull();
     expect(dados.chamadosAtrasados).toBe(0);
     expect(dados.chamadosDentroDoSLA).toBe(0);
-    expect(dados.porProjeto).toEqual([
-      { nome: "ERICSSON", quantidade: 0 },
-      { nome: "HUAWEI", quantidade: 0 },
-      { nome: "NOKIA", quantidade: 0 },
-      { nome: "ZTE", quantidade: 0 },
-      { nome: "IEZ", quantidade: 0 },
-    ]);
     expect(dados.porCategoria).toEqual([
       { nome: "MOS", quantidade: 0 },
       { nome: "Infraestrutura", quantidade: 0 },
@@ -121,10 +120,10 @@ describe("getIndicadoresExecutivosSuporte — base vazia", () => {
     ]);
     expect(dados.topCategorias).toEqual([]);
     expect(dados.topSubcategorias).toEqual([]);
-    expect(dados.topProjetos).toEqual([]);
     expect(dados.topTecnicos).toEqual([]);
     expect(dados.topRegionais).toEqual([]);
     expect(dados.evolucaoDiaria).toEqual([]);
+    expect(dados.chamadosPorProjetoRegional).toEqual([]);
   });
 });
 
@@ -172,25 +171,18 @@ describe("getIndicadoresExecutivosSuporte — cards / status executivo", () => {
   });
 });
 
-describe("getIndicadoresExecutivosSuporte — distribuição por Projeto e por Categoria", () => {
-  it("decodifica corretamente o Projeto/Categoria persistidos e conta em 'Não classificado' o que não é decodificável", async () => {
+describe("getIndicadoresExecutivosSuporte — distribuição por Categoria (v7.3 — sem nível de Projeto/Fabricante)", () => {
+  it("reconhece exatamente as 5 Categorias Principais atuais e conta em 'Não classificado' qualquer outro valor (nunca classificado ou de uma matriz anterior)", async () => {
     findManySupportTicketMock.mockResolvedValue([
-      ticket({ categoriaPrincipal: "NOKIA > MOS" }),
-      ticket({ categoriaPrincipal: "NOKIA > MOS" }),
-      ticket({ categoriaPrincipal: "IEZ > Ativação" }),
-      ticket({ categoriaPrincipal: "IEZ" }),
       ticket({ categoriaPrincipal: "MOS" }),
+      ticket({ categoriaPrincipal: "MOS" }),
+      ticket({ categoriaPrincipal: "Ativação" }),
+      ticket({ categoriaPrincipal: "NOKIA > MOS" }),
+      ticket({ categoriaPrincipal: "NOKIA" }),
       ticket({ categoriaPrincipal: null }),
       ticket({ categoriaPrincipal: "IEZ > Dia de Integração" }),
     ]);
     const dados = await getIndicadoresExecutivosSuporte();
-
-    const nokia = dados.porProjeto.find((p) => p.nome === "NOKIA");
-    const iez = dados.porProjeto.find((p) => p.nome === "IEZ");
-    const naoClassificadoProjeto = dados.porProjeto.find((p) => p.nome === "Não classificado");
-    expect(nokia?.quantidade).toBe(2);
-    expect(iez?.quantidade).toBe(2);
-    expect(naoClassificadoProjeto?.quantidade).toBe(3);
 
     const mos = dados.porCategoria.find((c) => c.nome === "MOS");
     const ativacao = dados.porCategoria.find((c) => c.nome === "Ativação");
@@ -200,30 +192,30 @@ describe("getIndicadoresExecutivosSuporte — distribuição por Projeto e por C
     expect(naoClassificadoCategoria?.quantidade).toBe(4);
   });
 
-  it("todos os 5 Projetos oficiais sempre aparecem em porProjeto, mesmo com 0 chamados", async () => {
-    findManySupportTicketMock.mockResolvedValue([ticket({ categoriaPrincipal: "NOKIA > MOS" })]);
+  it("todas as 5 Categorias Principais oficiais sempre aparecem em porCategoria, mesmo com 0 chamados", async () => {
+    findManySupportTicketMock.mockResolvedValue([ticket({ categoriaPrincipal: "MOS" })]);
     const dados = await getIndicadoresExecutivosSuporte();
-    const nomes = dados.porProjeto.map((p) => p.nome);
-    expect(nomes).toEqual(expect.arrayContaining(["ERICSSON", "HUAWEI", "NOKIA", "ZTE", "IEZ"]));
-    expect(dados.porProjeto.find((p) => p.nome === "ZTE")?.quantidade).toBe(0);
+    const nomes = dados.porCategoria.map((c) => c.nome);
+    expect(nomes).toEqual(
+      expect.arrayContaining(["MOS", "Infraestrutura", "Instalação", "Ativação", "Aceitação"])
+    );
+    expect(dados.porCategoria.find((c) => c.nome === "Ativação")?.quantidade).toBe(0);
   });
 });
 
 describe("getIndicadoresExecutivosSuporte — Top 10", () => {
-  it("topCategorias/topProjetos ficam ordenados por quantidade decrescente e limitados a 10", async () => {
+  it("topCategorias fica ordenado por quantidade decrescente e limitado a 10", async () => {
     findManySupportTicketMock.mockResolvedValue([
-      ticket({ categoriaPrincipal: "NOKIA > MOS" }),
-      ticket({ categoriaPrincipal: "NOKIA > MOS" }),
-      ticket({ categoriaPrincipal: "NOKIA > MOS" }),
-      ticket({ categoriaPrincipal: "HUAWEI > Ativação" }),
-      ticket({ categoriaPrincipal: "HUAWEI > Ativação" }),
-      ticket({ categoriaPrincipal: "ZTE > Aceitação" }),
+      ticket({ categoriaPrincipal: "MOS" }),
+      ticket({ categoriaPrincipal: "MOS" }),
+      ticket({ categoriaPrincipal: "MOS" }),
+      ticket({ categoriaPrincipal: "Ativação" }),
+      ticket({ categoriaPrincipal: "Ativação" }),
+      ticket({ categoriaPrincipal: "Aceitação" }),
     ]);
     const dados = await getIndicadoresExecutivosSuporte();
     expect(dados.topCategorias[0]).toEqual({ nome: "MOS", quantidade: 3 });
     expect(dados.topCategorias[1]).toEqual({ nome: "Ativação", quantidade: 2 });
-    expect(dados.topProjetos[0]).toEqual({ nome: "NOKIA", quantidade: 3 });
-    expect(dados.topProjetos.map((p) => p.nome)).not.toContain("ERICSSON");
   });
 
   it("topSubcategorias usa 'Sem subcategoria' para valores vazios", async () => {
@@ -460,13 +452,13 @@ describe("mapearStatusExecutivoParaParametrosSuporte — tradução do bucket ex
 
 describe("montarHrefDrillDown — construção pura da URL de /suporte para o drill-down", () => {
   it("combina base + extra em uma query string, com extra tendo prioridade sobre base para a mesma chave", () => {
-    const href = montarHrefDrillDown({ status: "Aberto", categoria_projeto: "NOKIA" }, { status: "Finalizado" });
-    expect(href).toBe("/suporte?status=Finalizado&categoria_projeto=NOKIA");
+    const href = montarHrefDrillDown({ status: "Aberto", categoria_principal: "MOS" }, { status: "Finalizado" });
+    expect(href).toBe("/suporte?status=Finalizado&categoria_principal=MOS");
   });
 
   it("omite parâmetros vazios/undefined", () => {
-    const href = montarHrefDrillDown({ data_inicio: undefined, categoria_projeto: "NOKIA" });
-    expect(href).toBe("/suporte?categoria_projeto=NOKIA");
+    const href = montarHrefDrillDown({ data_inicio: undefined, categoria_principal: "MOS" });
+    expect(href).toBe("/suporte?categoria_principal=MOS");
   });
 
   it("sem nenhum parâmetro, retorna '/suporte' sem query string", () => {
@@ -557,5 +549,106 @@ describe("construirQueryStringAtual — botão 'Atualizar Dashboard' preserva os
     const query = construirQueryStringAtual({ tag: ["a", "b"] });
     const params = new URLSearchParams(query);
     expect(params.getAll("tag")).toEqual(["a", "b"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Missão "TELEQUIPE SUPORTE STA — Evolução 7.1" — novo gráfico "Chamados por
+// Projeto e Regional" (itens 12, 13, 14 e 15 da lista de testes obrigatórios).
+// ---------------------------------------------------------------------------
+
+describe("calcularChamadosPorProjetoRegional — agrega corretamente Projeto x Regional (item 12)", () => {
+  it("sem nenhum chamado, devolve lista vazia", () => {
+    expect(calcularChamadosPorProjetoRegional([])).toEqual([]);
+  });
+
+  it("agrupa corretamente por Projeto e conta cada Regional dentro do grupo", () => {
+    const resultado = calcularChamadosPorProjetoRegional([
+      { projeto: "NOKIA-TIM", regional: "SP" },
+      { projeto: "NOKIA-TIM", regional: "SP" },
+      { projeto: "NOKIA-TIM", regional: "MG" },
+      { projeto: "HUAWEI-TIM", regional: "BASE" },
+    ]);
+    expect(resultado).toEqual([
+      { projeto: "NOKIA-TIM", regionais: { SP: 2, MG: 1 }, total: 3 },
+      { projeto: "HUAWEI-TIM", regionais: { BASE: 1 }, total: 1 },
+    ]);
+  });
+
+  it("só inclui Projetos que possuem pelo menos 1 chamado no conjunto recebido", () => {
+    const resultado = calcularChamadosPorProjetoRegional([{ projeto: "IEZ-ZTE", regional: "MG" }]);
+    expect(resultado).toEqual([{ projeto: "IEZ-ZTE", regionais: { MG: 1 }, total: 1 }]);
+    expect(resultado.some((p) => p.projeto === "ZTE-CLARO")).toBe(false);
+  });
+
+  it('chamados sem Projeto ou Regional são agrupados como "Não classificado" (item 13)', () => {
+    const resultado = calcularChamadosPorProjetoRegional([
+      { projeto: null, regional: null },
+      { projeto: "Expansão 5G Regional Sul", regional: null }, // texto livre legado, fora da matriz
+      { projeto: "NOKIA-TIM", regional: "CO" },
+    ]);
+    expect(resultado).toEqual([
+      { projeto: "NOKIA-TIM", regionais: { CO: 1 }, total: 1 },
+      { projeto: "Projeto não classificado", regionais: { "Regional não classificada": 2 }, total: 2 },
+    ]);
+  });
+
+  it("Projeto oficial com combinação fora da matriz atual vira Combinação histórica, nunca é descartado", () => {
+    const resultado = calcularChamadosPorProjetoRegional([
+      { projeto: "HUAWEI-TIM", regional: "SP" },
+      { projeto: "HUAWEI-TIM", regional: "BASE" },
+    ]);
+    expect(resultado).toEqual([
+      { projeto: "HUAWEI-TIM", regionais: { "Combinação histórica": 1, BASE: 1 }, total: 2 },
+    ]);
+  });
+
+  it("o total do gráfico corresponde ao total de chamados considerados (item 14)", () => {
+    const tickets = [
+      { projeto: "NOKIA-TIM", regional: "SP" },
+      { projeto: "NOKIA-TIM", regional: "MG" },
+      { projeto: "ZTE-CLARO", regional: "RJ" },
+      { projeto: null, regional: null },
+    ];
+    const resultado = calcularChamadosPorProjetoRegional(tickets);
+    const totalAgregado = resultado.reduce((soma, p) => soma + p.total, 0);
+    expect(totalAgregado).toBe(tickets.length);
+  });
+
+  it("nunca conta o mesmo chamado duas vezes (cada chamado incrementa exatamente 1 combinação Projeto/Regional)", () => {
+    const tickets = Array.from({ length: 25 }, (_, i) => ({
+      projeto: "ZTE-CLARO",
+      regional: ["NO", "RJ", "SP", "MG"][i % 4],
+    }));
+    const resultado = calcularChamadosPorProjetoRegional(tickets);
+    expect(resultado).toHaveLength(1);
+    const totalAgregado = Object.values(resultado[0].regionais).reduce((s, v) => s + v, 0);
+    expect(totalAgregado).toBe(25);
+    expect(resultado[0].total).toBe(25);
+  });
+});
+
+describe("getIndicadoresExecutivosSuporte — chamadosPorProjetoRegional integrado à consulta única (sem regressão nos demais gráficos, item 15)", () => {
+  it("popula chamadosPorProjetoRegional a partir dos mesmos registros da única consulta, sem afetar os demais indicadores", async () => {
+    findManySupportTicketMock.mockResolvedValue([
+      ticket({ projeto: "NOKIA-TIM", regional: "SP", categoriaPrincipal: "MOS" }),
+      ticket({ projeto: "NOKIA-TIM", regional: "MG", categoriaPrincipal: "MOS" }),
+      ticket({ projeto: "HUAWEI-TIM", regional: "BASE", categoriaPrincipal: "Infraestrutura" }),
+    ]);
+    const dados = await getIndicadoresExecutivosSuporte();
+
+    expect(dados.totalChamados).toBe(3);
+    expect(dados.chamadosPorProjetoRegional).toEqual([
+      { projeto: "NOKIA-TIM", regionais: { SP: 1, MG: 1 }, total: 2 },
+      { projeto: "HUAWEI-TIM", regionais: { BASE: 1 }, total: 1 },
+    ]);
+    // Regressão: os gráficos/indicadores pré-existentes (baseados na
+    // Categoria Principal da hierarquia de Categoria do Atendimento, campo
+    // `categoriaPrincipal` — conceito INDEPENDENTE do Projeto x Regional
+    // oficial) continuam funcionando exatamente como antes, a partir da
+    // mesma única consulta.
+    expect(dados.porCategoria.find((c) => c.nome === "MOS")?.quantidade).toBe(2);
+    expect(dados.porCategoria.find((c) => c.nome === "Infraestrutura")?.quantidade).toBe(1);
+    expect(findManySupportTicketMock).toHaveBeenCalledTimes(1);
   });
 });

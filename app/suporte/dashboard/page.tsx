@@ -3,6 +3,7 @@ import PageHeader from "@/components/PageHeader";
 import CardIndicadorExecutivo from "@/components/CardIndicadorExecutivo";
 import BarraDistribuicao from "@/components/BarraDistribuicao";
 import GraficoEvolucaoDiaria from "@/components/GraficoEvolucaoDiaria";
+import GraficoProjetoRegional from "@/components/GraficoProjetoRegional";
 import SeletorPeriodoDashboard from "@/components/SeletorPeriodoDashboard";
 import {
   getIndicadoresExecutivosSuporte,
@@ -22,7 +23,7 @@ import {
   type FiltrosDashboardExecutivo,
 } from "@/lib/dashboardSuporte";
 import { formatarTempo } from "@/lib/suporte";
-import { obterProjetos, obterCategoriasPrincipais } from "@/lib/categoriasSuporte";
+import { obterCategoriasPrincipais } from "@/lib/categoriasSuporte";
 import { RECURSOS, requireAccess, criarFiltroDeAcessoAtendimentos } from "@/lib/autorizacao";
 
 export const dynamic = "force-dynamic";
@@ -96,7 +97,6 @@ export default async function DashboardExecutivoSuportePage({ searchParams }: { 
   const escopo = criarFiltroDeAcessoAtendimentos(usuario);
 
   const filtros: FiltrosDashboardExecutivo = {
-    projeto: primeiro(searchParams.projeto) || undefined,
     categoria: primeiro(searchParams.categoria) || undefined,
     statusExecutivo: primeiro(searchParams.status) || undefined,
     regional: primeiro(searchParams.regional) || undefined,
@@ -124,8 +124,7 @@ export default async function DashboardExecutivoSuportePage({ searchParams }: { 
     obterRegionaisDisponiveis(),
   ]);
 
-  const projetosOficiais = obterProjetos();
-  const categoriasOficiais = obterCategoriasPrincipais(projetosOficiais[0] ?? null);
+  const categoriasOficiais = obterCategoriasPrincipais();
 
   const evolucaoExibida = dados.evolucaoDiaria.slice(-DIAS_EXIBIDOS_EVOLUCAO);
 
@@ -139,7 +138,6 @@ export default async function DashboardExecutivoSuportePage({ searchParams }: { 
   const baseDrillDown: Record<string, string | undefined> = {
     data_inicio: dataInicioResolvida,
     data_fim: dataFimResolvida,
-    categoria_projeto: filtros.projeto,
     categoria_principal: filtros.categoria,
     tecnico: filtros.tecnico,
     regional: filtros.regional,
@@ -190,15 +188,6 @@ export default async function DashboardExecutivoSuportePage({ searchParams }: { 
           method="get"
           className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
         >
-          <div>
-            <label className="label-field">Projeto</label>
-            <select name="projeto" defaultValue={filtros.projeto ?? ""} className="input-field">
-              <option value="">Todos</option>
-              {projetosOficiais.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className="label-field">Categoria</label>
             <select name="categoria" defaultValue={filtros.categoria ?? ""} className="input-field">
@@ -314,17 +303,6 @@ export default async function DashboardExecutivoSuportePage({ searchParams }: { 
       <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-graphite-500">Gráficos</h2>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="card">
-          <h3 className="mb-4 text-base font-semibold text-graphite-100">Chamados por Projeto</h3>
-          <BarraDistribuicao
-            itens={dados.porProjeto}
-            corPadrao="bg-neon-500"
-            corPorNome={{ [NAO_CLASSIFICADO]: "bg-graphite-500" }}
-            montarHref={(nome) =>
-              nome === NAO_CLASSIFICADO ? null : montarHrefDrillDown(baseDrillDown, { categoria_projeto: nome })
-            }
-          />
-        </div>
-        <div className="card">
           <h3 className="mb-4 text-base font-semibold text-graphite-100">Chamados por Categoria</h3>
           <BarraDistribuicao
             itens={dados.porCategoria}
@@ -385,18 +363,16 @@ export default async function DashboardExecutivoSuportePage({ searchParams }: { 
         />
       </div>
 
+      <div className="mt-6 card">
+        <h3 className="mb-1 text-base font-semibold text-graphite-100">Chamados por Projeto e Regional</h3>
+        <p className="mb-4 text-xs text-graphite-500">
+          Distribuição dos chamados de cada Projeto oficial (matriz Projeto × Regional) entre suas Regionais permitidas — respeita os Filtros Globais acima.
+        </p>
+        <GraficoProjetoRegional dados={dados.chamadosPorProjetoRegional} />
+      </div>
+
       <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wide text-graphite-500">Rankings</h2>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="card">
-          <h3 className="mb-4 text-base font-semibold text-graphite-100">Top 10 Projetos</h3>
-          <BarraDistribuicao
-            itens={dados.topProjetos}
-            corPadrao="bg-neon-500"
-            montarHref={(nome) =>
-              nome === NAO_CLASSIFICADO ? null : montarHrefDrillDown(baseDrillDown, { categoria_projeto: nome })
-            }
-          />
-        </div>
         <div className="card">
           <h3 className="mb-4 text-base font-semibold text-graphite-100">Top 10 Categorias</h3>
           <BarraDistribuicao

@@ -67,9 +67,9 @@ enum PerfilUsuario {
 /// Conta de acesso ao sistema (login). Independente do Cadastro Mestre de
 /// Colaboradores — ver nota V7 no topo do arquivo.
 model Usuario {
-  id     Int    @id @default(autoincrement())
-  nome   String
-  email  String @unique
+  id    Int    @id @default(autoincrement())
+  nome  String
+  email String @unique
 
   /// Hash scrypt (salt + hash em hex, formato "salt:hash") — nunca a senha em texto puro. Ver lib/senha.ts.
   senhaHash String
@@ -93,8 +93,8 @@ model Usuario {
 }
 
 model Colaborador {
-  id     Int    @id @default(autoincrement())
-  nome   String
+  id   Int    @id @default(autoincrement())
+  nome String
 
   // Cópia normalizada de `nome` (maiúsculas, sem acento, espaços
   // colapsados) — chave natural estável usada pelo Smart Sync para
@@ -208,9 +208,9 @@ model SupportTicket {
   // independente do id interno.
   numero Int @unique @default(autoincrement())
 
-  dataAtendimento DateTime
-  horaInicio      String
-  horaFim         String?
+  dataAtendimento  DateTime
+  horaInicio       String
+  horaFim          String?
   // Calculado automaticamente a partir de horaInicio/horaFim, em minutos.
   tempoAtendimento Int?
 
@@ -223,14 +223,25 @@ model SupportTicket {
   liderNomeHistorico  String?
   equipeNomeHistorico String?
 
-  projeto String?
-  cliente String?
+  projeto  String?
+  // Regional oficial do chamado (missão "TELEQUIPE SUPORTE STA — Evolução
+  // 7.1"), validada contra a matriz Projeto x Regional em
+  // lib/projetoRegional.ts (fonte única — não duplicar aqui nem em nenhum
+  // outro arquivo). Coluna aditiva/nullable (migration
+  // 20260724120000_add_regional_suporte): atendimentos antigos ficam com
+  // "regional" NULL e continuam aparecendo normalmente, classificados como
+  // "Regional não classificada" no Dashboard Executivo. Distinta do campo
+  // "regional" já existente em Colaborador (lib/colaboradores.ts) — aquele é
+  // texto livre do funcionário, sem relação com Projeto; este é validado e
+  // pertence ao chamado (SupportTicket) em si.
+  regional String?
+  cliente  String?
   // Site atendido (ex.: "SN-AQDIK4"). Opcional — preserva atendimentos
   // antigos (registrados antes deste campo existir) e permite atendimentos
   // administrativos sem site associado. Normalizado em maiúsculas na
   // camada de Server Action (app/suporte/actions.ts, normalizarSite em
   // lib/suporte.ts) antes de chegar aqui — nunca validado de novo no schema.
-  site String?
+  site     String?
 
   tipoAtendimento String
   // Campo legado (obrigatório) — mantido por compatibilidade com todos os
@@ -240,7 +251,7 @@ model SupportTicket {
   // FÍSICO" — ver formatarCategoriaHierarquica em lib/categoriasSuporte.ts),
   // preservando a exibição/pesquisa por texto para quem só conhece este
   // campo (filtros antigos, exportação, etc).
-  categoria String
+  categoria       String
 
   // Classificação hierárquica de até 3 níveis (Categoria Principal →
   // Subcategoria → Detalhamento), conforme a estrutura oficial em
@@ -282,8 +293,8 @@ model SupportTicket {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  colaborador         Colaborador? @relation(fields: [colaboradorId], references: [id], onDelete: SetNull)
-  usuarioResponsavel  Usuario?     @relation(fields: [usuarioResponsavelId], references: [id], onDelete: SetNull)
+  colaborador        Colaborador? @relation(fields: [colaboradorId], references: [id], onDelete: SetNull)
+  usuarioResponsavel Usuario?     @relation(fields: [usuarioResponsavelId], references: [id], onDelete: SetNull)
 
   @@index([colaboradorId])
   @@index([status])

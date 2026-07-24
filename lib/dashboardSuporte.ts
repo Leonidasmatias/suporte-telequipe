@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import { interpretarCategoriaPrincipalPersistida, obterProjetos, obterCategoriasPrincipais } from "@/lib/categoriasSuporte";
+import { categoriaPrincipalValida, obterCategoriasPrincipais } from "@/lib/categoriasSuporte";
 import { buildWhereSuporte } from "@/lib/suporte";
+import { classificarProjetoRegionalHistorico, listarProjetos as listarProjetosOficiaisMatriz, PROJETO_NAO_CLASSIFICADO } from "@/lib/projetoRegional";
 
 /**
  * Sprint "v7.2 — Dashboard Executivo de Suporte" + REVISÃO (Centro de
@@ -9,8 +10,9 @@ import { buildWhereSuporte } from "@/lib/suporte";
  *
  * Módulo isolado: contém só os cálculos de indicadores/filtros/drill-down do
  * Dashboard Executivo. NÃO duplica nenhuma regra de classificação — reaproveita
- * `interpretarCategoriaPrincipalPersistida`/`obterProjetos`/
- * `obterCategoriasPrincipais` (lib/categoriasSuporte.ts, não alterado) e, a
+ * `categoriaPrincipalValida`/`obterCategoriasPrincipais`
+ * (lib/categoriasSuporte.ts — reescrito na missão v7.3, que eliminou o nível
+ * "Projeto" por Fabricante da hierarquia de categorias) e, a
  * partir desta revisão, também `buildWhereSuporte` (lib/suporte.ts, só
  * ADITIVAMENTE estendido com os campos `resultado`/`regional` — ver aquele
  * arquivo) para Projeto/Categoria/Técnico/Período, em vez de reimplementar a
@@ -31,6 +33,8 @@ import { buildWhereSuporte } from "@/lib/suporte";
 
 export type ContagemNome = { nome: string; quantidade: number };
 export type PontoEvolucaoDiaria = { data: string; quantidade: number };
+/** Estrutura do novo gráfico "Chamados por Projeto e Regional" (missão "Evolução 7.1"). */
+export type ContagemProjetoRegional = { projeto: string; regionais: Record<string, number>; total: number };
 
 export const TAMANHO_TOP = 10;
 export const NAO_CLASSIFICADO = "Não classificado";
@@ -56,9 +60,7 @@ export type IndicadoresExecutivosSuporte = {
   emAtendimento: number;
   concluidos: number;
   cancelados: number;
-  /** Um item por Projeto oficial (ordem de `obterProjetos()`), sempre presente mesmo com 0, mais "Não classificado" ao final quando houver pelo menos 1. */
-  porProjeto: ContagemNome[];
-  /** Um item por Categoria Principal oficial (compartilhada pelos 5 projetos), sempre presente mesmo com 0, mais "Não classificado" ao final quando houver pelo menos 1. */
+  /** Um item por Categoria Principal oficial, sempre presente mesmo com 0, mais "Não classificado" ao final quando houver pelo menos 1. */
   porCategoria: ContagemNome[];
   /** Aberto / Em Atendimento / Concluído / Cancelado — ver `statusExecutivo` abaixo para a regra de mapeamento. */
   porStatusExecutivo: ContagemNome[];
@@ -69,12 +71,13 @@ export type IndicadoresExecutivosSuporte = {
   chamadosDentroDoSLA: number;
   topCategorias: ContagemNome[];
   topSubcategorias: ContagemNome[];
-  topProjetos: ContagemNome[];
   /** Sem lista oficial fixa (Regional/Técnico são texto livre) — usado tanto para o gráfico quanto para o ranking Top 10 (mesmo array, ver nota em app/suporte/dashboard/page.tsx). */
   topTecnicos: ContagemNome[];
   topRegionais: ContagemNome[];
   /** Ordenado por data crescente. Cobre TODO o histórico dentro do `where` recebido — a tela decide quantos dias exibir. */
   evolucaoDiaria: PontoEvolucaoDiaria[];
+  /** Novo gráfico "Chamados por Projeto e Regional" (missão "Evolução 7.1") — ver `calcularChamadosPorProjetoRegional`. */
+  chamadosPorProjetoRegional: ContagemProjetoRegional[];
 };
 
 /**
@@ -125,7 +128,63 @@ type TicketParaIndicadores = {
   createdAt: Date;
   updatedAt: Date;
   colaborador: { regional: string | null } | null;
+  /** Missão "Evolução 7.1" — Projeto/Regional do PRÓPRIO chamado (matriz oficial, lib/projetoRegional.ts), distintos do Regional do Colaborador acima. */
+  projeto: string | null;
+  regional: string | null;
 };
+
+/**
+ * Agrega "Chamados por Projeto e Regional" (novo gráfico do Dashboard
+ * Executivo, missão "Evolução 7.1") a partir de uma lista de chamados já
+ * filtrada (mesmo escopo/Filtros Globais de `getIndicadoresExecutivosSuporte`
+ * — nunca uma consulta própria, para nunca contar um chamado duas vezes nem
+ * divergir dos demais indicadores da página).
+ *
+ * Função pura e testável (regra explícita da missão) — recebe só os campos
+ * `projeto`/`regional` de cada chamado, sem nenhuma dependência do Prisma.
+ * Cada par é classificado por `classificarProjetoRegionalHistorico`
+ * (lib/projetoRegional.ts, fonte única — nunca duplicada aqui): chamados
+ * antigos sem Projeto/Regional oficial, ou com uma combinação fora da
+ * matriz atual, continuam visíveis nos buckets "Projeto não
+ * classificado"/"Regional não classificada"/"Combinação histórica", nunca
+ * excluídos.
+ *
+ * Só aparecem no resultado os Projetos que realmente possuem pelo menos 1
+ * chamado no conjunto recebido (requisito explícito da missão) — ordenados
+ * pela ordem oficial da matriz (`listarProjetos()`), com "Projeto não
+ * classificado" sempre por último, quando presente.
+ */
+export function calcularChamadosPorProjetoRegional(
+  tickets: { projeto: string | null; regional: string | null }[]
+): ContagemProjetoRegional[] {
+  const ordemProjetos: string[] = listarProjetosOficiaisMatriz();
+  const porProjeto = new Map<string, Map<string, number>>();
+
+  for (const t of tickets) {
+    const classificado = classificarProjetoRegionalHistorico(t.projeto, t.regional);
+    if (!porProjeto.has(classificado.projeto)) porProjeto.set(classificado.projeto, new Map());
+    const mapaRegionais = porProjeto.get(classificado.projeto)!;
+    mapaRegionais.set(classificado.regional, (mapaRegionais.get(classificado.regional) ?? 0) + 1);
+  }
+
+  function paraContagem(projeto: string): ContagemProjetoRegional {
+    const mapaRegionais = porProjeto.get(projeto)!;
+    const regionais: Record<string, number> = {};
+    let total = 0;
+    for (const [regional, quantidade] of mapaRegionais.entries()) {
+      regionais[regional] = quantidade;
+      total += quantidade;
+    }
+    return { projeto, regionais, total };
+  }
+
+  const projetosOficiaisPresentes = ordemProjetos.filter((p) => porProjeto.has(p));
+  const resultado = projetosOficiaisPresentes.map(paraContagem);
+  if (porProjeto.has(PROJETO_NAO_CLASSIFICADO)) {
+    resultado.push(paraContagem(PROJETO_NAO_CLASSIFICADO));
+  }
+  return resultado;
+}
 
 /**
  * Calcula TODOS os indicadores do Dashboard Executivo a partir de uma única
@@ -153,13 +212,13 @@ export async function getIndicadoresExecutivosSuporte(
       createdAt: true,
       updatedAt: true,
       colaborador: { select: { regional: true } },
+      projeto: true,
+      regional: true,
     },
   });
 
-  const projetosOficiais = obterProjetos();
-  const categoriasOficiais = obterCategoriasPrincipais(projetosOficiais[0] ?? null);
+  const categoriasOficiais = obterCategoriasPrincipais();
 
-  const mapaProjeto = new Map<string, number>();
   const mapaCategoria = new Map<string, number>();
   const mapaStatusExecutivo = new Map<string, number>(STATUS_EXECUTIVO_OPCOES.map((nome) => [nome, 0]));
   const mapaSubcategoria = new Map<string, number>();
@@ -185,9 +244,8 @@ export async function getIndicadoresExecutivosSuporte(
     else if (bucketStatus === "Concluído") concluidos++;
     else cancelados++;
 
-    const decodificado = interpretarCategoriaPrincipalPersistida(t.categoriaPrincipal);
-    incrementar(mapaProjeto, decodificado?.projeto ?? NAO_CLASSIFICADO);
-    incrementar(mapaCategoria, decodificado?.categoriaPrincipal ?? NAO_CLASSIFICADO);
+    const categoriaValida = categoriaPrincipalValida(t.categoriaPrincipal);
+    incrementar(mapaCategoria, categoriaValida ?? NAO_CLASSIFICADO);
 
     incrementar(mapaSubcategoria, t.subcategoria?.trim() || SEM_SUBCATEGORIA);
     incrementar(mapaTecnico, t.tecnicoResponsavel?.trim() || TECNICO_NAO_INFORMADO);
@@ -217,7 +275,6 @@ export async function getIndicadoresExecutivosSuporte(
     }
   }
 
-  const porProjeto = comBucketNaoClassificado(projetosOficiais, mapaProjeto);
   const porCategoria = comBucketNaoClassificado(categoriasOficiais, mapaCategoria);
 
   const porStatusExecutivo: ContagemNome[] = STATUS_EXECUTIVO_OPCOES.map((nome) => ({
@@ -238,7 +295,6 @@ export async function getIndicadoresExecutivosSuporte(
     emAtendimento,
     concluidos,
     cancelados,
-    porProjeto,
     porCategoria,
     porStatusExecutivo,
     tempoMedioAtendimentoMinutos: media(temposAtendimento),
@@ -247,10 +303,10 @@ export async function getIndicadoresExecutivosSuporte(
     chamadosDentroDoSLA,
     topCategorias: ordenarDesc(mapaCategoria).slice(0, TAMANHO_TOP),
     topSubcategorias: ordenarDesc(mapaSubcategoria).slice(0, TAMANHO_TOP),
-    topProjetos: ordenarDesc(mapaProjeto).slice(0, TAMANHO_TOP),
     topTecnicos: ordenarDesc(mapaTecnico).slice(0, TAMANHO_TOP),
     topRegionais: ordenarDesc(mapaRegional).slice(0, TAMANHO_TOP),
     evolucaoDiaria,
+    chamadosPorProjetoRegional: calcularChamadosPorProjetoRegional(tickets),
   };
 }
 
@@ -273,9 +329,7 @@ export type PeriodoDashboard = (typeof PERIODOS_DASHBOARD)[number]["valor"];
 export const PERIODO_PADRAO: PeriodoDashboard = "todos";
 
 export type FiltrosDashboardExecutivo = {
-  /** Nível "Projeto" da hierarquia v7.1 (IEZ/ERICSSON/HUAWEI/NOKIA/ZTE). */
-  projeto?: string;
-  /** Nível "Categoria Principal", compartilhado pelos 5 projetos. */
+  /** Categoria Principal da hierarquia de categorias (ver lib/categoriasSuporte.ts). Missão v7.3: o filtro por Projeto/Fabricante foi removido — não existe mais nível de Projeto nesta hierarquia. */
   categoria?: string;
   /** Bucket executivo — ver `StatusExecutivo` acima. */
   statusExecutivo?: string;
@@ -384,7 +438,6 @@ export function montarWhereDashboard(
     AND: [
       escopo,
       buildWhereSuporte({
-        categoriaProjeto: filtros.projeto,
         categoriaPrincipal: filtros.categoria,
         tecnico: filtros.tecnico,
         dataInicio,

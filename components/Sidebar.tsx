@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import UserMenu from "./UserMenu";
 import { canAccess } from "@/lib/permissoes";
 import { navItems } from "@/lib/navegacao";
 import type { UsuarioSessao } from "@/lib/auth";
+import { VERSAO_EXIBICAO } from "@/lib/versaoSistema";
 
 // Etapa 3: cada item de lib/navegacao.ts carrega o `recurso` correspondente
 // na matriz de permissões (lib/permissoes.ts) — o menu só mostra o que o
@@ -21,11 +23,29 @@ export default function Sidebar({ usuario }: { usuario: UsuarioSessao }) {
   return (
     <aside className="fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-neon-500">
       <div className="flex h-16 items-center gap-3 border-b border-white/10 px-5">
-        <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#ffffff] text-sm font-bold text-neon-500">
-          T
+        {/* Missão "TELEQUIPE SUPORTE STA — Evolução 7.1", item 11: logotipo
+            oficial no lugar do bloco "T". Arquivo já presente no repositório
+            em public/images/logo-telequipe.png (path público
+            "/images/logo-telequipe.png"). Fundo branco arredondado
+            preservado (mesmo elemento visual de antes) para garantir
+            legibilidade do logotipo sobre o azul institucional da Sidebar —
+            `object-contain` evita qualquer deformação da imagem. `priority`
+            porque está sempre acima da dobra (cabeçalho fixo da Sidebar). Em
+            telas menores o container `h-9 w-9` já reduz proporcionalmente
+            (mesmo tamanho fixo de antes, sem overflow). */}
+        <div className="relative flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#ffffff]">
+          <Image
+            src="/images/logo-telequipe.png"
+            alt="TELEQUIPE"
+            width={36}
+            height={36}
+            priority
+            className="h-full w-full object-contain p-0.5"
+          />
         </div>
         <div className="leading-tight">
-          <p className="text-sm font-semibold tracking-wide text-[#ffffff]">TELEQUIPE SUPORTE STA</p>
+          <p className="text-sm font-semibold tracking-wide text-[#ffffff]">TELEQUIPE SUPORTE</p>
+          <p className="text-sm font-semibold tracking-wide text-[#ffffff]">STA</p>
           <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-neon-200">Projetos e Telecomunicações</p>
         </div>
       </div>
@@ -85,7 +105,7 @@ export default function Sidebar({ usuario }: { usuario: UsuarioSessao }) {
           </span>
           <p className="text-xs text-neon-100">Sistema operacional</p>
         </div>
-        <p className="mt-1 text-[11px] text-neon-200">v7.0 · Suporte Telequipe</p>
+        <p className="mt-1 text-[11px] text-neon-200">{VERSAO_EXIBICAO} · Suporte Telequipe</p>
 
         <div className="mt-3 border-t border-white/10 pt-3">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neon-200">

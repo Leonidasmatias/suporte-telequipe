@@ -65,7 +65,6 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
     colaboradorId: primeiro(searchParams.colaborador_id) ? Number(primeiro(searchParams.colaborador_id)) : undefined,
     projeto: primeiro(searchParams.projeto) || undefined,
     categoria: primeiro(searchParams.categoria) || undefined,
-    categoriaProjeto: primeiro(searchParams.categoria_projeto) || undefined,
     categoriaPrincipal: primeiro(searchParams.categoria_principal) || undefined,
     subcategoria: primeiro(searchParams.subcategoria) || undefined,
     detalhamento: primeiro(searchParams.detalhamento) || undefined,
@@ -95,7 +94,6 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
       colaborador_id: filtros.colaboradorId ? String(filtros.colaboradorId) : undefined,
       projeto: filtros.projeto,
       categoria: filtros.categoria,
-      categoria_projeto: filtros.categoriaProjeto,
       categoria_principal: filtros.categoriaPrincipal,
       subcategoria: filtros.subcategoria,
       detalhamento: filtros.detalhamento,
@@ -211,7 +209,6 @@ export default async function SuportePage({ searchParams }: { searchParams: Sear
           <div className="sm:col-span-2 lg:col-span-4">
             <SeletorCategoriaSuporte
               modoFiltro
-              projetoDefault={filtros.categoriaProjeto ?? ""}
               categoriaPrincipalDefault={filtros.categoriaPrincipal ?? ""}
               subcategoriaDefault={filtros.subcategoria ?? ""}
               detalhamentoDefault={filtros.detalhamento ?? ""}
